@@ -12,12 +12,17 @@ import time
 import math
 
 
-address = '2503 Harvard Independence, MO, 64052'
+address = '2503 harvard ave, independence, mo 64052'
 radius = 1
 bedroom = 3
 
 gis = GIS('https://www.arcgis.com', 'arcgis_python', 'P@ssword123')
-geocoder = geocode(address)[0]
+
+try:
+    geocoder = geocode(address)[0]
+except Exception as e:
+    print('!!! Could not geocode address string !!!')
+    sys.exit()
 
 x_lon = geocoder['location']['x']
 y_lat = geocoder['location']['y']
@@ -27,39 +32,44 @@ y_lat = geocoder['location']['y']
 # Getting rental data from RealtyMole. NOTE: I am just using sample data.
 ########################################################
 
-time.sleep(3)
-with open("./un_pw.json", "r") as file:
-    realtymole = json.load(file)['realtymole_gmail']
+# time.sleep(3)
+# with open("./un_pw.json", "r") as file:
+#     realtymole = json.load(file)['realtymole_gmail']
+#
+# url = "https://realty-mole-property-api.p.rapidapi.com/rentalListings"
+#
+# querystring = {"radius":radius,
+#                # "bedrooms":bedroom,
+#                "limit":50,
+#                "longitude":x_lon,
+#                "latitude":y_lat
+# }
+#
+# headers = {
+#     'x-rapidapi-host': "realty-mole-property-api.p.rapidapi.com",
+#     'x-rapidapi-key': realtymole
+#     }
+#
+# response = requests.request("GET", url, headers=headers, params=querystring)
+#
+# print(response.text)
+#
+# if response.status_code != 200:
+#     print('*ScopeOutLog* !!! ERROR with REALTYMOLE API !!!!')
+# else:
+#     print('*ScopeOutLog* SUCCESS - REALTY MOLE')
+#
+# with open('testdata/realtymolesampledata (address).txt', 'w') as f:
+#     f.write(response.text)
 
-url = "https://realty-mole-property-api.p.rapidapi.com/rentalListings"
 
-querystring = {"radius":radius,
-               # "bedrooms":bedroom,
-               "limit":50,
-               "longitude":x_lon,
-               "latitude":y_lat
-}
 
-headers = {
-    'x-rapidapi-host': "realty-mole-property-api.p.rapidapi.com",
-    'x-rapidapi-key': realtymole
-    }
 
-response = requests.request("GET", url, headers=headers, params=querystring)
 
-print(response.text)
-
-if response.status_code != 200:
-    print('*ScopeOutLog* !!! ERROR with REALTYMOLE API !!!!')
-else:
-    print('*ScopeOutLog* SUCCESS - REALTY MOLE')
-
-with open('testdata/realtymolesampledata (address).txt', 'w') as f:
-    f.write(response.text)
-
+##### Get sample data instead of make API call above ####
+df = pd.DataFrame(data=rental_data)
 
 writer = pd.ExcelWriter('testdata/rentalsummary.xlsx')
-df = pd.DataFrame(data=rental_data)
 
 highestrent = df['price'].max()
 lowestrent = df['price'].min()
@@ -162,14 +172,15 @@ data = enrich(study_areas=[{"address":{"text":address}}],
               analysis_variables=list(non_comparison_variables.keys()),
               return_geometry=False)
 
-if data['messages'][0]['type'] == 'esriJobMessageTypeError':
-    sys.exit()
+if type(data) == dict:
+    if data['messages'][0]['type'] == 'esriJobMessageTypeError':
+        print('!!! Error with Arcgis api !!!')
+        sys.exit()
 
 non_comparison_df = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
                           'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData',
                           'sourceCountry'])
 
-# propertytypes = non_comparison_df[propertytypes_columns]
 non_comparison_df['SingleFamilyDetached'] = non_comparison_df['ACSUNT1DET_P']
 non_comparison_df['SingleFamilyAttached'] = non_comparison_df['ACSUNT1ATT_P']
 non_comparison_df['DuplexTriplexQuadplex'] = non_comparison_df['ACSUNT2_P'] + non_comparison_df['ACSUNT3_P']
@@ -178,7 +189,6 @@ non_comparison_df['LargeApartments50plus'] = non_comparison_df['ACSUNT50UP_P']
 non_comparison_df['MobileHomes'] = non_comparison_df['ACSUNTMOB_P']
 non_comparison_df = non_comparison_df.drop(columns=['ACSUNT1DET_P','ACSUNT1ATT_P','ACSUNT2_P','ACSUNT3_P','ACSUNT5_P','ACSUNT10_P','ACSUNT20_P','ACSUNT50UP_P','ACSUNTMOB_P'])
 
-# yearbuilt = non_comparison_df[yearbuilt_columns]
 non_comparison_df['1939orBefore'] = non_comparison_df['ACSBLT1939_P']
 non_comparison_df['1940_1959'] = non_comparison_df['ACSBLT1940_P'] + non_comparison_df['ACSBLT1950_P']
 non_comparison_df['1960_1979'] = non_comparison_df['ACSBLT1960_P'] + non_comparison_df['ACSBLT1970_P']
@@ -187,9 +197,7 @@ non_comparison_df['2000_2013'] = non_comparison_df['ACSBLT2000_P'] + non_compari
 non_comparison_df['2014orAfter'] = non_comparison_df['ACSBLT2014_P']
 non_comparison_df = non_comparison_df.drop(columns=['ACSBLT2014_P','ACSBLT2010_P','ACSBLT2000_P','ACSBLT1990_P','ACSBLT1980_P','ACSBLT1970_P','ACSBLT1960_P','ACSBLT1950_P','ACSBLT1940_P','ACSBLT1939_P'])
 
-
-
-data = enrich(study_areas=[{"address":{"text":" 2503 Harvard Ave, Independence, MO 64052"}}],
+data = enrich(study_areas=[{"address":{"text":address}}],
               analysis_variables=list(comparison_variables.keys()),
               comparison_levels=['US.WholeUSA','US.CBSA','US.Counties'],
               return_geometry=False)
