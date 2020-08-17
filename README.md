@@ -1,1 +1,8 @@
 # ScopeOutReportExample
+
+
+libraries:
+
+arcgis
+openpyxl
+
