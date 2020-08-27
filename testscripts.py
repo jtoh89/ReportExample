@@ -34,8 +34,8 @@ y_lat = geocoder['location']['y']
 # the data into "realtymolesampledata.txt"
 ########################################################
 
-with open("./un_pw.json", "r") as file:
-    realtymole = json.load(file)['realtymole_gmail']
+# with open("./un_pw.json", "r") as file:
+#     realtymole = json.load(file)['realtymole_gmail']
 
 url = "https://realty-mole-property-api.p.rapidapi.com/rentalListings"
 
