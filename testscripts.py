@@ -8,13 +8,13 @@ import json
 from arcgisvariables import variables
 from realtymolesampledata import rental_data
 import sys
-import time
 import math
+from pymongo import MongoClient
 
 
-address = '2503 harvard ave, independence, mo 64052'
-radius = 1
-bedroom = 3
+
+address = '936 Gonzales St, Placentia, CA 92870'
+radius = 2
 
 gis = GIS('https://www.arcgis.com', 'arcgis_python', 'P@ssword123')
 
@@ -29,22 +29,21 @@ y_lat = geocoder['location']['y']
 
 
 ########################################################
-# Getting rental data from RealtyMole. NOTE: I am just using sample data.
+# Getting rental data from RealtyMole. NOTE: Below is how I made requests to the API. I commented out this section and am
+# just using sample data for this example. You can see I stored the response data into "realtymoledata50.json". And I pasted
+# the data into "realtymolesampledata.txt"
 ########################################################
 
-# time.sleep(3)
-# with open("./un_pw.json", "r") as file:
-#     realtymole = json.load(file)['realtymole_gmail']
-#
-# url = "https://realty-mole-property-api.p.rapidapi.com/rentalListings"
-#
-# querystring = {"radius":radius,
-#                # "bedrooms":bedroom,
-#                "limit":50,
-#                "longitude":x_lon,
-#                "latitude":y_lat
-# }
-#
+with open("./un_pw.json", "r") as file:
+    realtymole = json.load(file)['realtymole_gmail']
+
+url = "https://realty-mole-property-api.p.rapidapi.com/rentalListings"
+
+querystring = {"radius":radius,
+               "limit":50,
+               "longitude":x_lon,
+               "latitude":y_lat}
+
 # headers = {
 #     'x-rapidapi-host': "realty-mole-property-api.p.rapidapi.com",
 #     'x-rapidapi-key': realtymole
@@ -52,18 +51,14 @@ y_lat = geocoder['location']['y']
 #
 # response = requests.request("GET", url, headers=headers, params=querystring)
 #
-# print(response.text)
-#
 # if response.status_code != 200:
 #     print('*ScopeOutLog* !!! ERROR with REALTYMOLE API !!!!')
 # else:
 #     print('*ScopeOutLog* SUCCESS - REALTY MOLE')
-#
-# with open('testdata/realtymolesampledata (address).txt', 'w') as f:
-#     f.write(response.text)
 
 
-
+# with open("testdata/realtymoledata50.json", 'w') as file:
+#     file.write(json.dumps(json.loads(response.text)))
 
 
 ##### Get sample data instead of make API call above ####
@@ -132,7 +127,6 @@ for price in df['price']:
         rent_range['rent_5000_more'] += 1
 
 rent_range.to_excel(writer, 'rentrange')
-
 
 rental_comps = df[['formattedAddress','bedrooms','bathrooms','price','propertyType','lastSeen','latitude','longitude']]\
     .rename(columns={'lastSeen':'lastSeenOnMarket'})
