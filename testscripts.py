@@ -13,7 +13,7 @@ from pymongo import MongoClient
 
 
 
-address = '936 Gonzales St, Placentia, CA 92870'
+address = 'anaheim, ca'
 radius = 2
 
 gis = GIS('https://www.arcgis.com', 'arcgis_python', 'P@ssword123')
@@ -155,9 +155,9 @@ writer.save()
 
 
 
-########################################################
-# Getting data from Arcgis REST API.
-########################################################
+#######################################################
+Getting data from Arcgis REST API.
+#######################################################
 
 comparison_variables = variables['comparison_variables']
 non_comparison_variables = variables['noncomparison_variables']
@@ -174,6 +174,15 @@ if type(data) == dict:
 non_comparison_df = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
                           'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData',
                           'sourceCountry'])
+
+
+non_comparison_df['OwnerOccupancyRate'] = round(non_comparison_df['OWNER_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
+non_comparison_df['RenterOccupancyRate'] = round(non_comparison_df['RENTER_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
+non_comparison_df['VacancyRate'] = round(non_comparison_df['VACANT_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
+non_comparison_df = non_comparison_df.drop(columns=['OWNER_CY','RENTER_CY','RENTER_CY'])
+
+
+
 
 non_comparison_df['SingleFamilyDetached'] = non_comparison_df['ACSUNT1DET_P']
 non_comparison_df['SingleFamilyAttached'] = non_comparison_df['ACSUNT1ATT_P']
