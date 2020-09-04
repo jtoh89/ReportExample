@@ -156,7 +156,7 @@ writer.save()
 
 
 #######################################################
-Getting data from Arcgis REST API.
+# Getting data from Arcgis REST API.
 #######################################################
 
 comparison_variables = variables['comparison_variables']
