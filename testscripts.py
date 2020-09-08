@@ -1,6 +1,5 @@
 from arcgis.gis import GIS
 from arcgis.geocoding import geocode
-from arcgis.geoenrichment import standard_geography_query
 from arcgis.geoenrichment import enrich
 import pandas as pd
 import requests
@@ -164,7 +163,11 @@ writer.save()
 comparison_variables = variables['comparison_variables']
 non_comparison_variables = variables['noncomparison_variables']
 
-data = enrich(study_areas=[{"address":{"text":address}}],
+x_lon = google_address.current_result.lng
+y_lat = google_address.current_result.lat
+
+
+data = enrich(study_areas=[{"geometry": {"x":x_lon,"y":y_lat}, "areaType":"RingBuffer","bufferUnits":"Miles","bufferRadii":[radius]}],
               analysis_variables=list(non_comparison_variables.keys()),
               return_geometry=False)
 
