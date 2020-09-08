@@ -10,22 +10,24 @@ from realtymolesampledata import rental_data
 import sys
 import math
 from pymongo import MongoClient
+import geocoder as googlegeocoder
+import sys
 
-
-
-address = 'anaheim, ca'
+address = '1521 SW Arbor Creek Dr, Lee\'s Summit, MO 64082'
 radius = 2
 
 gis = GIS('https://www.arcgis.com', 'arcgis_python', 'P@ssword123')
 
-try:
-    geocoder = geocode(address)[0]
-except Exception as e:
+with open("./un_pw.json", "r") as file:
+    gmap_api = json.load(file)['googleapi']
+    google_address = googlegeocoder.google(address, key=gmap_api)
+
+if google_address.error:
     print('!!! Could not geocode address string !!!')
     sys.exit()
 
-x_lon = geocoder['location']['x']
-y_lat = geocoder['location']['y']
+x_lon = google_address.current_result.lng
+y_lat = google_address.current_result.lat
 
 
 ########################################################
@@ -35,15 +37,15 @@ y_lat = geocoder['location']['y']
 ########################################################
 
 # with open("./un_pw.json", "r") as file:
-#     realtymole = json.load(file)['realtymole_gmail']
-
-url = "https://realty-mole-property-api.p.rapidapi.com/rentalListings"
-
-querystring = {"radius":radius,
-               "limit":50,
-               "longitude":x_lon,
-               "latitude":y_lat}
-
+#     realtymole = json.load(file)['realtymole_yahoo']
+#
+# url = "https://realty-mole-property-api.p.rapidapi.com/rentalListings"
+#
+# querystring = {"radius":radius,
+#                "limit":50,
+#                "longitude":x_lon,
+#                "latitude":y_lat}
+#
 # headers = {
 #     'x-rapidapi-host': "realty-mole-property-api.p.rapidapi.com",
 #     'x-rapidapi-key': realtymole
@@ -55,9 +57,9 @@ querystring = {"radius":radius,
 #     print('*ScopeOutLog* !!! ERROR with REALTYMOLE API !!!!')
 # else:
 #     print('*ScopeOutLog* SUCCESS - REALTY MOLE')
-
-
-# with open("testdata/realtymoledata50.json", 'w') as file:
+#
+#
+# with open("testdata/RENT_{}.json".format(address), 'w') as file:
 #     file.write(json.dumps(json.loads(response.text)))
 
 
@@ -128,7 +130,7 @@ for price in df['price']:
 
 rent_range.to_excel(writer, 'rentrange')
 
-rental_comps = df[['formattedAddress','bedrooms','bathrooms','price','propertyType','lastSeen','latitude','longitude']]\
+rental_comps = df[['formattedAddress','squareFootage','bedrooms','bathrooms','price','propertyType','lastSeen','latitude','longitude']]\
     .rename(columns={'lastSeen':'lastSeenOnMarket'})
 
 for i,comp in rental_comps.iterrows():
