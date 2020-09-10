@@ -188,26 +188,21 @@ non_comparison_df = non_comparison_df.drop(columns=['OWNER_CY','RENTER_CY','RENT
 
 
 
-
-non_comparison_df['SingleFamilyDetached'] = non_comparison_df['ACSUNT1DET_P']
-non_comparison_df['SingleFamilyAttached'] = non_comparison_df['ACSUNT1ATT_P']
-non_comparison_df['DuplexTriplexQuadplex'] = non_comparison_df['ACSUNT2_P'] + non_comparison_df['ACSUNT3_P']
-non_comparison_df['Apartments5to50units'] = non_comparison_df['ACSUNT5_P'] + non_comparison_df['ACSUNT10_P'] + non_comparison_df['ACSUNT20_P']
-non_comparison_df['LargeApartments50plus'] = non_comparison_df['ACSUNT50UP_P']
-non_comparison_df['MobileHomes'] = non_comparison_df['ACSUNTMOB_P']
-non_comparison_df = non_comparison_df.drop(columns=['ACSUNT1DET_P','ACSUNT1ATT_P','ACSUNT2_P','ACSUNT3_P','ACSUNT5_P','ACSUNT10_P','ACSUNT20_P','ACSUNT50UP_P','ACSUNTMOB_P'])
-
-non_comparison_df['1939orBefore'] = non_comparison_df['ACSBLT1939_P']
-non_comparison_df['1940_1959'] = non_comparison_df['ACSBLT1940_P'] + non_comparison_df['ACSBLT1950_P']
-non_comparison_df['1960_1979'] = non_comparison_df['ACSBLT1960_P'] + non_comparison_df['ACSBLT1970_P']
-non_comparison_df['1980_1999'] = non_comparison_df['ACSBLT1980_P'] + non_comparison_df['ACSBLT1990_P']
-non_comparison_df['2000_2013'] = non_comparison_df['ACSBLT2000_P'] + non_comparison_df['ACSBLT2010_P']
-non_comparison_df['2014orAfter'] = non_comparison_df['ACSBLT2014_P']
-non_comparison_df = non_comparison_df.drop(columns=['ACSBLT2014_P','ACSBLT2010_P','ACSBLT2000_P','ACSBLT1990_P','ACSBLT1980_P','ACSBLT1970_P','ACSBLT1960_P','ACSBLT1950_P','ACSBLT1940_P','ACSBLT1939_P'])
+non_comparison_df['Under100k'] = non_comparison_df['VAL0_CY_P'] + non_comparison_df['VAL50K_CY_P']
+non_comparison_df['100k_200k'] = non_comparison_df['VAL100K_CY_P'] + non_comparison_df['VAL150K_CY_P']
+non_comparison_df['200k_300k'] = non_comparison_df['VAL200K_CY_P'] + non_comparison_df['VAL250K_CY_P']
+non_comparison_df['300k_500k'] = non_comparison_df['VAL300K_CY_P'] + non_comparison_df['VAL400K_CY_P']
+non_comparison_df['500K_750k'] = non_comparison_df['VAL500K_CY_P']
+non_comparison_df['750k_1M'] = non_comparison_df['VAL750K_CY_P']
+non_comparison_df['1M_2M'] = non_comparison_df['VAL1M_CY_P'] + non_comparison_df['VAL1PT5MCY_P']
+non_comparison_df['2plusM'] = non_comparison_df['VAL2M_CY_P']
+non_comparison_df.drop(columns=['VAL0_CY_P', 'VAL50K_CY_P', 'VAL100K_CY_P', 'VAL150K_CY_P',  'VAL200K_CY_P',
+                                'VAL250K_CY_P', 'VAL300K_CY_P', 'VAL400K_CY_P', 'VAL500K_CY_P', 'VAL750K_CY_P',
+                                'VAL1M_CY_P', 'VAL1PT5MCY_P', 'VAL2M_CY_P'])
 
 data = enrich(study_areas=[{"address":{"text":address}}],
               analysis_variables=list(comparison_variables.keys()),
-              comparison_levels=['US.WholeUSA','US.CBSA','US.Counties'],
+              comparison_levels=['US.WholeUSA','US.CBSA','US.Counties','US.Tracts'],
               return_geometry=False)
 
 comparison_df = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
@@ -234,6 +229,8 @@ for i, row in comparison_df.iterrows():
 
 
 with pd.ExcelWriter('testdata/arcgisoutput.xlsx') as writer:
+    non_comparison_df = non_comparison_df.rename(columns=variables['noncomparison_variables'])
+    comparison_df = comparison_df.rename(columns=variables['comparison_variables'])
     non_comparison_df.to_excel(writer, sheet_name='noncomparions')
     comparison_df.to_excel(writer, sheet_name='comparison')
 
