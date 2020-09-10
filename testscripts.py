@@ -12,8 +12,16 @@ from pymongo import MongoClient
 import geocoder as googlegeocoder
 import sys
 
-address = '1521 SW Arbor Creek Dr, Lee\'s Summit, MO 64082'
-radius = 2
+
+
+
+#######################################################
+# Provide address and radius value from Arcgis REST API.
+#######################################################
+
+
+address = '89445'
+radius = 1
 
 gis = GIS('https://www.arcgis.com', 'arcgis_python', 'P@ssword123')
 
@@ -27,6 +35,90 @@ if google_address.error:
 
 x_lon = google_address.current_result.lng
 y_lat = google_address.current_result.lat
+
+
+#######################################################
+# Getting data from Arcgis REST API.
+#######################################################
+
+comparison_variables = variables['comparison_variables']
+non_comparison_variables = variables['noncomparison_variables']
+
+
+data = enrich(study_areas=[{"geometry": {"x":x_lon,"y":y_lat}, "areaType":"RingBuffer","bufferUnits":"Miles","bufferRadii":[radius]}],
+              analysis_variables=list(non_comparison_variables.keys()),
+              return_geometry=False)
+
+if type(data) == dict:
+    if data['messages'][0]['type'] == 'esriJobMessageTypeError':
+        print('!!! Error with Arcgis api !!!')
+        sys.exit()
+if data['TOTPOP_CY'][0] == 0:
+        print('!!! Do not run if there is no population !!!')
+        sys.exit()
+
+non_comparison_df = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
+                          'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData',
+                          'sourceCountry'])
+
+
+non_comparison_df['OwnerOccupancyRate'] = round(non_comparison_df['OWNER_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
+non_comparison_df['RenterOccupancyRate'] = round(non_comparison_df['RENTER_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
+non_comparison_df['VacancyRate'] = round(non_comparison_df['VACANT_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
+non_comparison_df = non_comparison_df.drop(columns=['OWNER_CY','RENTER_CY','RENTER_CY'])
+
+
+
+non_comparison_df['Under100k'] = non_comparison_df['VAL0_CY_P'] + non_comparison_df['VAL50K_CY_P']
+non_comparison_df['100k_200k'] = non_comparison_df['VAL100K_CY_P'] + non_comparison_df['VAL150K_CY_P']
+non_comparison_df['200k_300k'] = non_comparison_df['VAL200K_CY_P'] + non_comparison_df['VAL250K_CY_P']
+non_comparison_df['300k_500k'] = non_comparison_df['VAL300K_CY_P'] + non_comparison_df['VAL400K_CY_P']
+non_comparison_df['500K_750k'] = non_comparison_df['VAL500K_CY_P']
+non_comparison_df['750k_1M'] = non_comparison_df['VAL750K_CY_P']
+non_comparison_df['1M_2M'] = non_comparison_df['VAL1M_CY_P'] + non_comparison_df['VAL1PT5MCY_P']
+non_comparison_df['2plusM'] = non_comparison_df['VAL2M_CY_P']
+non_comparison_df.drop(columns=['VAL0_CY_P', 'VAL50K_CY_P', 'VAL100K_CY_P', 'VAL150K_CY_P',  'VAL200K_CY_P',
+                                'VAL250K_CY_P', 'VAL300K_CY_P', 'VAL400K_CY_P', 'VAL500K_CY_P', 'VAL750K_CY_P',
+                                'VAL1M_CY_P', 'VAL1PT5MCY_P', 'VAL2M_CY_P'])
+
+data = enrich(study_areas=[{"address":{"text":address}}],
+              analysis_variables=list(comparison_variables.keys()),
+              comparison_levels=['US.WholeUSA','US.CBSA','US.Counties','US.Tracts'],
+              return_geometry=False)
+
+comparison_df = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
+                          'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData',
+                          'sourceCountry'])
+
+comparison_df['StdGeographyName'] = comparison_df['StdGeographyName'].str.replace('Metropolitan Statistical Area','MSA')
+
+
+crime_index_multiplier = {'CRMCYMURD':5, 'CRMCYROBB':86.2, 'CRMCYRAPE':30.9, 'CRMCYASST':246.8}
+
+
+for i, row in comparison_df.iterrows():
+    if row['StdGeographyLevel'] == 'US.WholeUSA':
+        comparison_df.at[i, 'CRMCYMURD'] = crime_index_multiplier['CRMCYMURD']
+        comparison_df.at[i, 'CRMCYROBB'] = crime_index_multiplier['CRMCYROBB']
+        comparison_df.at[i, 'CRMCYRAPE'] = crime_index_multiplier['CRMCYRAPE']
+        comparison_df.at[i, 'CRMCYASST'] = crime_index_multiplier['CRMCYASST']
+    else:
+        comparison_df.at[i, 'CRMCYMURD'] = comparison_df.at[i, 'CRMCYMURD'] * crime_index_multiplier['CRMCYMURD'] * .01
+        comparison_df.at[i, 'CRMCYROBB'] = comparison_df.at[i, 'CRMCYROBB'] * crime_index_multiplier['CRMCYROBB'] * .01
+        comparison_df.at[i, 'CRMCYRAPE'] = comparison_df.at[i, 'CRMCYRAPE'] * crime_index_multiplier['CRMCYRAPE'] * .01
+        comparison_df.at[i, 'CRMCYASST'] = comparison_df.at[i, 'CRMCYASST'] * crime_index_multiplier['CRMCYASST'] * .01
+
+
+with pd.ExcelWriter('testdata/arcgisoutput.xlsx') as writer:
+    non_comparison_df = non_comparison_df.rename(columns=variables['noncomparison_variables'])
+    comparison_df = comparison_df.rename(columns=variables['comparison_variables'])
+    non_comparison_df.to_excel(writer, sheet_name='noncomparions')
+    comparison_df.to_excel(writer, sheet_name='comparison')
+
+
+
+
+
 
 
 ########################################################
@@ -154,83 +246,4 @@ rental_comps.sort_values(by=['DistanceFromProperty']).to_excel(writer, 'rentalco
 
 writer.save()
 
-
-
-#######################################################
-# Getting data from Arcgis REST API.
-#######################################################
-
-comparison_variables = variables['comparison_variables']
-non_comparison_variables = variables['noncomparison_variables']
-
-x_lon = google_address.current_result.lng
-y_lat = google_address.current_result.lat
-
-
-data = enrich(study_areas=[{"geometry": {"x":x_lon,"y":y_lat}, "areaType":"RingBuffer","bufferUnits":"Miles","bufferRadii":[radius]}],
-              analysis_variables=list(non_comparison_variables.keys()),
-              return_geometry=False)
-
-if type(data) == dict:
-    if data['messages'][0]['type'] == 'esriJobMessageTypeError':
-        print('!!! Error with Arcgis api !!!')
-        sys.exit()
-
-non_comparison_df = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
-                          'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData',
-                          'sourceCountry'])
-
-
-non_comparison_df['OwnerOccupancyRate'] = round(non_comparison_df['OWNER_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
-non_comparison_df['RenterOccupancyRate'] = round(non_comparison_df['RENTER_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
-non_comparison_df['VacancyRate'] = round(non_comparison_df['VACANT_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
-non_comparison_df = non_comparison_df.drop(columns=['OWNER_CY','RENTER_CY','RENTER_CY'])
-
-
-
-non_comparison_df['Under100k'] = non_comparison_df['VAL0_CY_P'] + non_comparison_df['VAL50K_CY_P']
-non_comparison_df['100k_200k'] = non_comparison_df['VAL100K_CY_P'] + non_comparison_df['VAL150K_CY_P']
-non_comparison_df['200k_300k'] = non_comparison_df['VAL200K_CY_P'] + non_comparison_df['VAL250K_CY_P']
-non_comparison_df['300k_500k'] = non_comparison_df['VAL300K_CY_P'] + non_comparison_df['VAL400K_CY_P']
-non_comparison_df['500K_750k'] = non_comparison_df['VAL500K_CY_P']
-non_comparison_df['750k_1M'] = non_comparison_df['VAL750K_CY_P']
-non_comparison_df['1M_2M'] = non_comparison_df['VAL1M_CY_P'] + non_comparison_df['VAL1PT5MCY_P']
-non_comparison_df['2plusM'] = non_comparison_df['VAL2M_CY_P']
-non_comparison_df.drop(columns=['VAL0_CY_P', 'VAL50K_CY_P', 'VAL100K_CY_P', 'VAL150K_CY_P',  'VAL200K_CY_P',
-                                'VAL250K_CY_P', 'VAL300K_CY_P', 'VAL400K_CY_P', 'VAL500K_CY_P', 'VAL750K_CY_P',
-                                'VAL1M_CY_P', 'VAL1PT5MCY_P', 'VAL2M_CY_P'])
-
-data = enrich(study_areas=[{"address":{"text":address}}],
-              analysis_variables=list(comparison_variables.keys()),
-              comparison_levels=['US.WholeUSA','US.CBSA','US.Counties','US.Tracts'],
-              return_geometry=False)
-
-comparison_df = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
-                          'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData',
-                          'sourceCountry'])
-
-comparison_df['StdGeographyName'] = comparison_df['StdGeographyName'].str.replace('Metropolitan Statistical Area','MSA')
-
-
-crime_index_multiplier = {'CRMCYMURD':5, 'CRMCYROBB':86.2, 'CRMCYRAPE':30.9, 'CRMCYASST':246.8}
-
-
-for i, row in comparison_df.iterrows():
-    if row['StdGeographyLevel'] == 'US.WholeUSA':
-        comparison_df.at[i, 'CRMCYMURD'] = crime_index_multiplier['CRMCYMURD']
-        comparison_df.at[i, 'CRMCYROBB'] = crime_index_multiplier['CRMCYROBB']
-        comparison_df.at[i, 'CRMCYRAPE'] = crime_index_multiplier['CRMCYRAPE']
-        comparison_df.at[i, 'CRMCYASST'] = crime_index_multiplier['CRMCYASST']
-    else:
-        comparison_df.at[i, 'CRMCYMURD'] = comparison_df.at[i, 'CRMCYMURD'] * crime_index_multiplier['CRMCYMURD'] * .01
-        comparison_df.at[i, 'CRMCYROBB'] = comparison_df.at[i, 'CRMCYROBB'] * crime_index_multiplier['CRMCYROBB'] * .01
-        comparison_df.at[i, 'CRMCYRAPE'] = comparison_df.at[i, 'CRMCYRAPE'] * crime_index_multiplier['CRMCYRAPE'] * .01
-        comparison_df.at[i, 'CRMCYASST'] = comparison_df.at[i, 'CRMCYASST'] * crime_index_multiplier['CRMCYASST'] * .01
-
-
-with pd.ExcelWriter('testdata/arcgisoutput.xlsx') as writer:
-    non_comparison_df = non_comparison_df.rename(columns=variables['noncomparison_variables'])
-    comparison_df = comparison_df.rename(columns=variables['comparison_variables'])
-    non_comparison_df.to_excel(writer, sheet_name='noncomparions')
-    comparison_df.to_excel(writer, sheet_name='comparison')
 
