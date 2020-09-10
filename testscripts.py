@@ -58,10 +58,10 @@ if data['TOTPOP_CY'][0] == 0:
         sys.exit()
 
 non_comparison_df = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
-                          'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData',
-                          'sourceCountry'])
+                          'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData', 'sourceCountry'])
 
 
+# Calculate owner, renter, vacancy rate by dividing by total housing units
 non_comparison_df['OwnerOccupancyRate'] = round(non_comparison_df['OWNER_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
 non_comparison_df['RenterOccupancyRate'] = round(non_comparison_df['RENTER_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
 non_comparison_df['VacancyRate'] = round(non_comparison_df['VACANT_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
@@ -69,6 +69,7 @@ non_comparison_df = non_comparison_df.drop(columns=['OWNER_CY','RENTER_CY','RENT
 
 
 
+# Group some columns for home value ranges. Reduce the number of ranges to 8.
 non_comparison_df['Under100k'] = non_comparison_df['VAL0_CY_P'] + non_comparison_df['VAL50K_CY_P']
 non_comparison_df['100k_200k'] = non_comparison_df['VAL100K_CY_P'] + non_comparison_df['VAL150K_CY_P']
 non_comparison_df['200k_300k'] = non_comparison_df['VAL200K_CY_P'] + non_comparison_df['VAL250K_CY_P']
@@ -81,21 +82,27 @@ non_comparison_df.drop(columns=['VAL0_CY_P', 'VAL50K_CY_P', 'VAL100K_CY_P', 'VAL
                                 'VAL250K_CY_P', 'VAL300K_CY_P', 'VAL400K_CY_P', 'VAL500K_CY_P', 'VAL750K_CY_P',
                                 'VAL1M_CY_P', 'VAL1PT5MCY_P', 'VAL2M_CY_P'])
 
+
+# Get comparison data
 data = enrich(study_areas=[{"address":{"text":address}}],
               analysis_variables=list(comparison_variables.keys()),
               comparison_levels=['US.WholeUSA','US.CBSA','US.Counties','US.Tracts'],
               return_geometry=False)
 
+
+# Convert crime index to victims per 100,000 people crime rate.
 comparison_df = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
                           'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData',
                           'sourceCountry'])
 
+
 comparison_df['StdGeographyName'] = comparison_df['StdGeographyName'].str.replace('Metropolitan Statistical Area','MSA')
 
-
+# These are current national crime rates. This changes once a year.
 crime_index_multiplier = {'CRMCYMURD':5, 'CRMCYROBB':86.2, 'CRMCYRAPE':30.9, 'CRMCYASST':246.8}
 
 
+# Convert crime index to victims per 100,000 people crime rate.
 for i, row in comparison_df.iterrows():
     if row['StdGeographyLevel'] == 'US.WholeUSA':
         comparison_df.at[i, 'CRMCYMURD'] = crime_index_multiplier['CRMCYMURD']
@@ -114,9 +121,6 @@ with pd.ExcelWriter('testdata/arcgisoutput.xlsx') as writer:
     comparison_df = comparison_df.rename(columns=variables['comparison_variables'])
     non_comparison_df.to_excel(writer, sheet_name='noncomparions')
     comparison_df.to_excel(writer, sheet_name='comparison')
-
-
-
 
 
 
@@ -167,9 +171,10 @@ sameplesize = len(df)
 
 bedroom_rent = pd.DataFrame(columns=['bedrooms','highestrent','lowestrent','averagerent','medianrent','sameplesize'])
 
-for i in [0,1,2,3,4]:
-    bedroom_data = df[df['bedrooms'] == i]
 
+# calculate values for box plot
+for i in [0,1,2,3,4,5,6]:
+    bedroom_data = df[df['bedrooms'] == i]
     bedroom_rent = bedroom_rent.append({
         'bedrooms': i,
         'highestrent': bedroom_data['price'].max(),
@@ -181,6 +186,7 @@ for i in [0,1,2,3,4]:
 
 bedroom_rent.to_excel(writer, 'bedroomrents')
 
+# Create the rent ranges
 rent_range = pd.DataFrame({
                         'rent_0_499':0,
                         'rent_500_999':0,
@@ -195,6 +201,8 @@ rent_range = pd.DataFrame({
                         'rent_5000_more':0},
                         index=[0])
 
+
+# Distribute each rental comp we get in the results
 for price in df['price']:
     if price < 500:
         rent_range['rent_0_499'] += 1
@@ -221,9 +229,11 @@ for price in df['price']:
 
 rent_range.to_excel(writer, 'rentrange')
 
+# rename lastseen to lastseenonmarket
 rental_comps = df[['formattedAddress','squareFootage','bedrooms','bathrooms','price','propertyType','lastSeen','latitude','longitude']]\
     .rename(columns={'lastSeen':'lastSeenOnMarket'})
 
+# calculate distance from the main address input
 for i,comp in rental_comps.iterrows():
     R = 6373.0
 
