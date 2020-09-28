@@ -1,6 +1,7 @@
 from arcgis.gis import GIS
 from arcgis.geocoding import geocode
 from arcgis.geoenrichment import enrich
+import numpy as np
 import pandas as pd
 import requests
 import json
@@ -14,13 +15,12 @@ import sys
 
 
 
-
-#######################################################
-# Provide address and radius value from Arcgis REST API.
-#######################################################
-
-
-address = '89445'
+# #######################################################
+# # Provide address and radius value from Arcgis REST API.
+# #######################################################
+#
+#
+address = '905 S Parsons Ave, Deland, FL 32720'
 radius = 1
 
 gis = GIS('https://www.arcgis.com', 'arcgis_python', 'P@ssword123')
@@ -69,18 +69,18 @@ non_comparison_df = non_comparison_df.drop(columns=['OWNER_CY','RENTER_CY','RENT
 
 
 
-# Group some columns for home value ranges. Reduce the number of ranges to 8.
-non_comparison_df['Under100k'] = non_comparison_df['VAL0_CY_P'] + non_comparison_df['VAL50K_CY_P']
-non_comparison_df['100k_200k'] = non_comparison_df['VAL100K_CY_P'] + non_comparison_df['VAL150K_CY_P']
-non_comparison_df['200k_300k'] = non_comparison_df['VAL200K_CY_P'] + non_comparison_df['VAL250K_CY_P']
-non_comparison_df['300k_500k'] = non_comparison_df['VAL300K_CY_P'] + non_comparison_df['VAL400K_CY_P']
-non_comparison_df['500K_750k'] = non_comparison_df['VAL500K_CY_P']
-non_comparison_df['750k_1M'] = non_comparison_df['VAL750K_CY_P']
-non_comparison_df['1M_2M'] = non_comparison_df['VAL1M_CY_P'] + non_comparison_df['VAL1PT5MCY_P']
-non_comparison_df['2plusM'] = non_comparison_df['VAL2M_CY_P']
-non_comparison_df.drop(columns=['VAL0_CY_P', 'VAL50K_CY_P', 'VAL100K_CY_P', 'VAL150K_CY_P',  'VAL200K_CY_P',
-                                'VAL250K_CY_P', 'VAL300K_CY_P', 'VAL400K_CY_P', 'VAL500K_CY_P', 'VAL750K_CY_P',
-                                'VAL1M_CY_P', 'VAL1PT5MCY_P', 'VAL2M_CY_P'])
+# # 9/14/2020 NO LONGER USING HOME VALUE RANGES FOR NOW Group some columns for home value ranges. Reduce the number of ranges to 8.
+# non_comparison_df['Under100k'] = non_comparison_df['VAL0_CY_P'] + non_comparison_df['VAL50K_CY_P']
+# non_comparison_df['100k_200k'] = non_comparison_df['VAL100K_CY_P'] + non_comparison_df['VAL150K_CY_P']
+# non_comparison_df['200k_300k'] = non_comparison_df['VAL200K_CY_P'] + non_comparison_df['VAL250K_CY_P']
+# non_comparison_df['300k_500k'] = non_comparison_df['VAL300K_CY_P'] + non_comparison_df['VAL400K_CY_P']
+# non_comparison_df['500K_750k'] = non_comparison_df['VAL500K_CY_P']
+# non_comparison_df['750k_1M'] = non_comparison_df['VAL750K_CY_P']
+# non_comparison_df['1M_2M'] = non_comparison_df['VAL1M_CY_P'] + non_comparison_df['VAL1PT5MCY_P']
+# non_comparison_df['2plusM'] = non_comparison_df['VAL2M_CY_P']
+# non_comparison_df.drop(columns=['VAL0_CY_P', 'VAL50K_CY_P', 'VAL100K_CY_P', 'VAL150K_CY_P',  'VAL200K_CY_P',
+#                                 'VAL250K_CY_P', 'VAL300K_CY_P', 'VAL400K_CY_P', 'VAL500K_CY_P', 'VAL750K_CY_P',
+#                                 'VAL1M_CY_P', 'VAL1PT5MCY_P', 'VAL2M_CY_P'])
 
 
 # Get comparison data
@@ -125,11 +125,14 @@ with pd.ExcelWriter('testdata/arcgisoutput.xlsx') as writer:
 
 
 
-########################################################
-# Getting rental data from RealtyMole. NOTE: Below is how I made requests to the API. I commented out this section and am
-# just using sample data for this example. You can see I stored the response data into "realtymoledata50.json". And I pasted
-# the data into "realtymolesampledata.txt"
-########################################################
+
+
+
+#######################################################
+## Getting rental data from RealtyMole. NOTE: Below is how I made requests to the API. I commented out this section and am
+## just using sample data for this example. You can see I stored the response data into "realtymoledata50.json". And I pasted
+## the data into "realtymolesampledata.txt"
+#######################################################
 
 # with open("./un_pw.json", "r") as file:
 #     realtymole = json.load(file)['realtymole_yahoo']
@@ -152,37 +155,39 @@ with pd.ExcelWriter('testdata/arcgisoutput.xlsx') as writer:
 #     print('*ScopeOutLog* !!! ERROR with REALTYMOLE API !!!!')
 # else:
 #     print('*ScopeOutLog* SUCCESS - REALTY MOLE')
-#
-#
-# with open("testdata/RENT_{}.json".format(address), 'w') as file:
-#     file.write(json.dumps(json.loads(response.text)))
+#     with open("testdata/RENT_{}.json".format(address), 'w') as file:
+#         file.write(json.dumps(json.loads(response.text)))
 
 
 ##### Get sample data instead of make API call above ####
 df = pd.DataFrame(data=rental_data)
-
 writer = pd.ExcelWriter('testdata/rentalsummary.xlsx')
 
-highestrent = df['price'].max()
-lowestrent = df['price'].min()
-averagerent = df['price'].mean()
-medianrent = df['price'].median()
-sameplesize = len(df)
 
-bedroom_rent = pd.DataFrame(columns=['bedrooms','highestrent','lowestrent','averagerent','medianrent','sameplesize'])
-
+bedroom_rent = pd.DataFrame(columns=['bedrooms','25thPercentile','75thPercentile','averagerent','medianrent','samplesize'])
 
 # calculate values for box plot
 for i in [0,1,2,3,4,5,6]:
     bedroom_data = df[df['bedrooms'] == i]
-    bedroom_rent = bedroom_rent.append({
-        'bedrooms': i,
-        'highestrent': bedroom_data['price'].max(),
-        'lowestrent': bedroom_data['price'].min(),
-        'averagerent': bedroom_data['price'].mean(),
-        'medianrent': bedroom_data['price'].median(),
-        'sameplesize': len(bedroom_data)
-    }, ignore_index=True)
+
+    if bedroom_data.empty:
+        bedroom_rent = bedroom_rent.append({
+            'bedrooms': i,
+            'averagerent': 'N/A',
+            'medianrent': 'N/A',
+            '25thPercentile': 'N/A',
+            '75thPercentile': 'N/A',
+            'samplesize': 0
+        }, ignore_index=True)
+    else:
+        bedroom_rent = bedroom_rent.append({
+            'bedrooms': i,
+            'averagerent': np.mean(bedroom_data['price']),
+            'medianrent': np.median(bedroom_data['price']),
+            '25thPercentile': np.percentile(bedroom_data['price'], 25),
+            '75thPercentile': np.percentile(bedroom_data['price'], 75),
+            'samplesize': len(bedroom_data)
+        }, ignore_index=True)
 
 bedroom_rent.to_excel(writer, 'bedroomrents')
 
@@ -252,7 +257,34 @@ for i,comp in rental_comps.iterrows():
 
     rental_comps.at[i, 'DistanceFromProperty'] = distance
 
+    if comp['squareFootage']:
+        rental_comps.at[i, 'pricepersqft'] = round(comp['price'] / comp['squareFootage'],2)
+    else:
+        rental_comps.at[i, 'pricepersqft'] = None
+
+
+# store data for rental comps sections
 rental_comps.sort_values(by=['DistanceFromProperty']).to_excel(writer, 'rentalcomps')
+
+
+
+# calculate price per sqft and exclude outliers for graph
+bedroomscatterplot = rental_comps[(rental_comps['pricepersqft'] > 0)]
+bedroomscatterplot = bedroomscatterplot[(bedroomscatterplot['bedrooms'] > 0)]
+
+outliers = []
+threshold = 3
+mean_1 = np.mean(bedroomscatterplot['pricepersqft'])
+std_1 = np.std(bedroomscatterplot['pricepersqft'])
+
+
+for price in bedroomscatterplot['pricepersqft']:
+    z_score = (price - mean_1) / std_1
+    if np.abs(z_score) > threshold:
+        outliers.append(price)
+
+bedroomscatterplot[['formattedAddress','squareFootage','bedrooms','bathrooms','price','propertyType','pricepersqft']].to_excel(writer, 'pricepersqft')
+
 
 writer.save()
 
