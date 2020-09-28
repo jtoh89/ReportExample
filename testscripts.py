@@ -68,21 +68,6 @@ non_comparison_df['VacancyRate'] = round(non_comparison_df['VACANT_CY'] / non_co
 non_comparison_df = non_comparison_df.drop(columns=['OWNER_CY','RENTER_CY','RENTER_CY'])
 
 
-
-# # 9/14/2020 NO LONGER USING HOME VALUE RANGES FOR NOW Group some columns for home value ranges. Reduce the number of ranges to 8.
-# non_comparison_df['Under100k'] = non_comparison_df['VAL0_CY_P'] + non_comparison_df['VAL50K_CY_P']
-# non_comparison_df['100k_200k'] = non_comparison_df['VAL100K_CY_P'] + non_comparison_df['VAL150K_CY_P']
-# non_comparison_df['200k_300k'] = non_comparison_df['VAL200K_CY_P'] + non_comparison_df['VAL250K_CY_P']
-# non_comparison_df['300k_500k'] = non_comparison_df['VAL300K_CY_P'] + non_comparison_df['VAL400K_CY_P']
-# non_comparison_df['500K_750k'] = non_comparison_df['VAL500K_CY_P']
-# non_comparison_df['750k_1M'] = non_comparison_df['VAL750K_CY_P']
-# non_comparison_df['1M_2M'] = non_comparison_df['VAL1M_CY_P'] + non_comparison_df['VAL1PT5MCY_P']
-# non_comparison_df['2plusM'] = non_comparison_df['VAL2M_CY_P']
-# non_comparison_df.drop(columns=['VAL0_CY_P', 'VAL50K_CY_P', 'VAL100K_CY_P', 'VAL150K_CY_P',  'VAL200K_CY_P',
-#                                 'VAL250K_CY_P', 'VAL300K_CY_P', 'VAL400K_CY_P', 'VAL500K_CY_P', 'VAL750K_CY_P',
-#                                 'VAL1M_CY_P', 'VAL1PT5MCY_P', 'VAL2M_CY_P'])
-
-
 # Get comparison data
 data = enrich(study_areas=[{"address":{"text":address}}],
               analysis_variables=list(comparison_variables.keys()),
@@ -98,7 +83,7 @@ comparison_df = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 
 
 comparison_df['StdGeographyName'] = comparison_df['StdGeographyName'].str.replace('Metropolitan Statistical Area','MSA')
 
-# These are current national crime rates. This changes once a year.
+# These are current national crime rates per 100,000 people. This changes once a year.
 crime_index_multiplier = {'CRMCYMURD':5, 'CRMCYROBB':86.2, 'CRMCYRAPE':30.9, 'CRMCYASST':246.8}
 
 
@@ -125,38 +110,35 @@ with pd.ExcelWriter('testdata/arcgisoutput.xlsx') as writer:
 
 
 
+######################################################
+# Getting rental data from RealtyMole. NOTE: Below is how I made requests to the API. I commented out this section and am
+# just using sample data for this example. You can see I stored the response data into "realtymoledata50.json". And I pasted
+# the data into "realtymolesampledata.txt"
+######################################################
 
+with open("./un_pw.json", "r") as file:
+    realtymole = json.load(file)['realtymole_yahoo']
 
+url = "https://realty-mole-property-api.p.rapidapi.com/rentalListings"
 
-#######################################################
-## Getting rental data from RealtyMole. NOTE: Below is how I made requests to the API. I commented out this section and am
-## just using sample data for this example. You can see I stored the response data into "realtymoledata50.json". And I pasted
-## the data into "realtymolesampledata.txt"
-#######################################################
+querystring = {"radius":radius,
+               "limit":50,
+               "longitude":x_lon,
+               "latitude":y_lat}
 
-# with open("./un_pw.json", "r") as file:
-#     realtymole = json.load(file)['realtymole_yahoo']
-#
-# url = "https://realty-mole-property-api.p.rapidapi.com/rentalListings"
-#
-# querystring = {"radius":radius,
-#                "limit":50,
-#                "longitude":x_lon,
-#                "latitude":y_lat}
-#
-# headers = {
-#     'x-rapidapi-host': "realty-mole-property-api.p.rapidapi.com",
-#     'x-rapidapi-key': realtymole
-#     }
-#
-# response = requests.request("GET", url, headers=headers, params=querystring)
-#
-# if response.status_code != 200:
-#     print('*ScopeOutLog* !!! ERROR with REALTYMOLE API !!!!')
-# else:
-#     print('*ScopeOutLog* SUCCESS - REALTY MOLE')
-#     with open("testdata/RENT_{}.json".format(address), 'w') as file:
-#         file.write(json.dumps(json.loads(response.text)))
+headers = {
+    'x-rapidapi-host': "realty-mole-property-api.p.rapidapi.com",
+    'x-rapidapi-key': realtymole
+    }
+
+response = requests.request("GET", url, headers=headers, params=querystring)
+
+if response.status_code != 200:
+    print('*ScopeOutLog* !!! ERROR with REALTYMOLE API !!!!')
+else:
+    print('*ScopeOutLog* SUCCESS - REALTY MOLE')
+    with open("testdata/RENT_{}.json".format(address), 'w') as file:
+        file.write(json.dumps(json.loads(response.text)))
 
 
 ##### Get sample data instead of make API call above ####
