@@ -12,7 +12,7 @@ import math
 from pymongo import MongoClient
 import geocoder as googlegeocoder
 import sys
-
+from sqlalchemy import create_engine
 
 
 # #######################################################
@@ -20,7 +20,7 @@ import sys
 # #######################################################
 #
 #
-address = '905 S Parsons Ave, Deland, FL 32720'
+address = '265 Massachusetts Ave, Cambridge, MA 02139'
 radius = 1
 
 gis = GIS('https://www.arcgis.com', 'arcgis_python', 'P@ssword123')
@@ -75,7 +75,29 @@ data = enrich(study_areas=[{"address":{"text":address}}],
               return_geometry=False)
 
 
-# Convert crime index to victims per 100,000 people crime rate.
+#The folling section was added because ESRI unemployment data is updated once a year. So, to keep it update to date,
+#So, to keep it updated, we will need to get a "multiplier" that will adjust all the unemployment value according
+#to the region.
+# There is a discrepancy between some MSAIDs between ESRI and BLS. This is to convert ESRI MSAIDs to NECTAIDS
+Esri_to_NECTAID_conversion = {
+'12620':'70750','12700':'70900','12740':'71050','13540':'71350','13620':'71500','14460':'71650','14860':'71950','15540':'72400','18180':'72700','19430':'19380','25540':'73450',
+'28300':'73750','29060':'73900','30100':'74350','30340':'74650','31700':'74950','35300':'75700','35980':'76450','36837':'36860','38340':'76600','38860':'76750','39150':'39140',
+'39300':'77200','40860':'77650','44140':'78100','45860':'78400','47240':'78500','49060':'11680','49340':'79600'
+}
+
+msaid = data[data['StdGeographyLevel'] == 'US.CBSA']['StdGeographyID'].iloc[0]
+
+if msaid in Esri_to_NECTAID_conversion.keys():
+    data.loc[data['StdGeographyLevel'] == 'US.CBSA', 'StdGeographyID'] = Esri_to_NECTAID_conversion[msaid]
+    msaid = Esri_to_NECTAID_conversion[msaid]
+with open("./un_pw.json", "r") as file:
+    aws_string = json.load(file)['aws_mysql']
+
+bls_unemployment_multiplier = pd.read_sql_query("select Unemployment_multiplier from ESRI_Unemployment_Multiplier where MSA_ID = {}".format(msaid)
+                                          , create_engine(aws_string))['Unemployment_multiplier'].iloc[0]
+
+data['UNEMPRT_CY'] = data['UNEMPRT_CY'] * bls_unemployment_multiplier
+
 comparison_df = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
                           'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData',
                           'sourceCountry'])
@@ -83,6 +105,8 @@ comparison_df = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 
 
 comparison_df['StdGeographyName'] = comparison_df['StdGeographyName'].str.replace('Metropolitan Statistical Area','MSA')
 
+
+# Convert crime index to victims per 100,000 people crime rate.
 # These are current national crime rates per 100,000 people. This changes once a year.
 crime_index_multiplier = {'CRMCYMURD':5, 'CRMCYROBB':86.2, 'CRMCYRAPE':30.9, 'CRMCYASST':246.8}
 
@@ -110,35 +134,35 @@ with pd.ExcelWriter('testdata/arcgisoutput.xlsx') as writer:
 
 
 
-######################################################
-# Getting rental data from RealtyMole. NOTE: Below is how I made requests to the API. I commented out this section and am
-# just using sample data for this example. You can see I stored the response data into "realtymoledata50.json". And I pasted
-# the data into "realtymolesampledata.txt"
-######################################################
-
-with open("./un_pw.json", "r") as file:
-    realtymole = json.load(file)['realtymole_yahoo']
-
-url = "https://realty-mole-property-api.p.rapidapi.com/rentalListings"
-
-querystring = {"radius":radius,
-               "limit":50,
-               "longitude":x_lon,
-               "latitude":y_lat}
-
-headers = {
-    'x-rapidapi-host': "realty-mole-property-api.p.rapidapi.com",
-    'x-rapidapi-key': realtymole
-    }
-
-response = requests.request("GET", url, headers=headers, params=querystring)
-
-if response.status_code != 200:
-    print('*ScopeOutLog* !!! ERROR with REALTYMOLE API !!!!')
-else:
-    print('*ScopeOutLog* SUCCESS - REALTY MOLE')
-    with open("testdata/RENT_{}.json".format(address), 'w') as file:
-        file.write(json.dumps(json.loads(response.text)))
+# ######################################################
+# # Getting rental data from RealtyMole. NOTE: Below is how I made requests to the API. I commented out this section and am
+# # just using sample data for this example. You can see I stored the response data into "realtymoledata50.json". And I pasted
+# # the data into "realtymolesampledata.txt"
+# ######################################################
+#
+# with open("./un_pw.json", "r") as file:
+#     realtymole = json.load(file)['realtymole_yahoo']
+#
+# url = "https://realty-mole-property-api.p.rapidapi.com/rentalListings"
+#
+# querystring = {"radius":radius,
+#                "limit":50,
+#                "longitude":x_lon,
+#                "latitude":y_lat}
+#
+# headers = {
+#     'x-rapidapi-host': "realty-mole-property-api.p.rapidapi.com",
+#     'x-rapidapi-key': realtymole
+#     }
+#
+# response = requests.request("GET", url, headers=headers, params=querystring)
+#
+# if response.status_code != 200:
+#     print('*ScopeOutLog* !!! ERROR with REALTYMOLE API !!!!')
+# else:
+#     print('*ScopeOutLog* SUCCESS - REALTY MOLE')
+#     with open("testdata/RENT_{}.json".format(address), 'w') as file:
+#         file.write(json.dumps(json.loads(response.text)))
 
 
 ##### Get sample data instead of make API call above ####
