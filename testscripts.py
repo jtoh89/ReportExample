@@ -9,18 +9,15 @@ from arcgisvariables import variables
 from realtymolesampledata import rental_data
 import sys
 import math
-from pymongo import MongoClient
 import geocoder as googlegeocoder
 import sys
 from sqlalchemy import create_engine
-
-
 # #######################################################
 # # Provide address and radius value from Arcgis REST API.
 # #######################################################
 #
 #
-address = '265 Massachusetts Ave, Cambridge, MA 02139'
+address = '2503 harvard ave, independence, mo 64052'
 radius = 1
 
 gis = GIS('https://www.arcgis.com', 'arcgis_python', 'P@ssword123')
@@ -37,13 +34,12 @@ x_lon = google_address.current_result.lng
 y_lat = google_address.current_result.lat
 
 
+
 #######################################################
 # Getting data from Arcgis REST API.
 #######################################################
 
-comparison_variables = variables['comparison_variables']
 non_comparison_variables = variables['noncomparison_variables']
-
 
 data = enrich(study_areas=[{"geometry": {"x":x_lon,"y":y_lat}, "areaType":"RingBuffer","bufferUnits":"Miles","bufferRadii":[radius]}],
               analysis_variables=list(non_comparison_variables.keys()),
@@ -57,6 +53,7 @@ if data['TOTPOP_CY'][0] == 0:
         print('!!! Do not run if there is no population !!!')
         sys.exit()
 
+#Drop useless columns
 non_comparison_df = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
                           'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData', 'sourceCountry'])
 
@@ -68,12 +65,25 @@ non_comparison_df['VacancyRate'] = round(non_comparison_df['VACANT_CY'] / non_co
 non_comparison_df = non_comparison_df.drop(columns=['OWNER_CY','RENTER_CY','RENTER_CY'])
 
 
+
+# Get top 5 Employment Industries
+employment_industry_variables = variables['employment_industry_variables']
+employment_industry_dict = non_comparison_df[list(employment_industry_variables.keys())].to_dict('records')[0]
+employment_industry_dict = {k: v for k, v in sorted(employment_industry_dict.items(), key=lambda item: item[1], reverse=True)}
+
+# Exclude top 5 Employment Industries variables. Index starts at 0
+drop_employment_variables = list(employment_industry_dict)[5:]
+
+non_comparison_df = non_comparison_df.drop(columns=drop_employment_variables)
+
+
 # Get comparison data
+comparison_variables = variables['comparison_variables']
+
 data = enrich(study_areas=[{"address":{"text":address}}],
               analysis_variables=list(comparison_variables.keys()),
               comparison_levels=['US.WholeUSA','US.CBSA','US.Counties','US.Tracts'],
               return_geometry=False)
-
 
 #The folling section was added because ESRI unemployment data is updated once a year. So, to keep it update to date,
 #So, to keep it updated, we will need to get a "multiplier" that will adjust all the unemployment value according
@@ -86,18 +96,39 @@ Esri_to_NECTAID_conversion = {
 }
 
 msaid = data[data['StdGeographyLevel'] == 'US.CBSA']['StdGeographyID'].iloc[0]
+stateid = data[data['StdGeographyLevel'] == 'US.Counties']['StdGeographyID'].iloc[0][:2]
 
 if msaid in Esri_to_NECTAID_conversion.keys():
     data.loc[data['StdGeographyLevel'] == 'US.CBSA', 'StdGeographyID'] = Esri_to_NECTAID_conversion[msaid]
     msaid = Esri_to_NECTAID_conversion[msaid]
+
+
+# use state level adjustment if msa isnt available
+
+
+
 with open("./un_pw.json", "r") as file:
     aws_string = json.load(file)['aws_mysql']
 
-bls_unemployment_multiplier = pd.read_sql_query("select Unemployment_multiplier from ESRI_Unemployment_Multiplier where MSA_ID = {}".format(msaid)
-                                          , create_engine(aws_string))['Unemployment_multiplier'].iloc[0]
+bls_unemployment_multiplier = pd.read_sql_query("""
+                                                select Geo_Type, Unemployment_multiplier
+                                                from ESRI_Unemployment_Multiplier 
+                                                where (Geo_ID = {} and Geo_Type =  'US.CBSA' )
+                                                or (Geo_ID =  {} and Geo_Type =  'US.States' ) 
+                                                or (Geo_ID =  '999' ) 
+                                                """.format(msaid,stateid), create_engine(aws_string))
 
-data['UNEMPRT_CY'] = data['UNEMPRT_CY'] * bls_unemployment_multiplier
+if 'US.CBSA' in bls_unemployment_multiplier['Geo_Type'].values:
+   unemployment_multiplier = bls_unemployment_multiplier[bls_unemployment_multiplier['Geo_Type'] == 'US.CBSA'].iloc[0]['Unemployment_multiplier']
+elif 'US.States' in bls_unemployment_multiplier['Geo_Type'].values:
+    unemployment_multiplier = bls_unemployment_multiplier[bls_unemployment_multiplier['Geo_Type'] == 'US.States'].iloc[0]['Unemployment_multiplier']
+else:
+    unemployment_multiplier = bls_unemployment_multiplier[bls_unemployment_multiplier['Geo_Type'] == 'US.WholeUSA'].iloc[0]['Unemployment_multiplier']
 
+#Truncate unemployment rate to 1 decimal point without rounding
+data['UNEMPRT_CY'] = (data['UNEMPRT_CY'] * unemployment_multiplier).apply(lambda x: math.floor(x * 10 ** 1) / 10 ** 1)
+
+#Drop useless columns
 comparison_df = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
                           'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData',
                           'sourceCountry'])
@@ -123,6 +154,7 @@ for i, row in comparison_df.iterrows():
         comparison_df.at[i, 'CRMCYROBB'] = comparison_df.at[i, 'CRMCYROBB'] * crime_index_multiplier['CRMCYROBB'] * .01
         comparison_df.at[i, 'CRMCYRAPE'] = comparison_df.at[i, 'CRMCYRAPE'] * crime_index_multiplier['CRMCYRAPE'] * .01
         comparison_df.at[i, 'CRMCYASST'] = comparison_df.at[i, 'CRMCYASST'] * crime_index_multiplier['CRMCYASST'] * .01
+
 
 
 with pd.ExcelWriter('testdata/arcgisoutput.xlsx') as writer:
