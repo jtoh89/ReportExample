@@ -12,6 +12,7 @@ import math
 import geocoder as googlegeocoder
 import sys
 from sqlalchemy import create_engine
+
 # #######################################################
 # # Provide address and radius value from Arcgis REST API.
 # #######################################################
@@ -39,42 +40,42 @@ y_lat = google_address.current_result.lat
 # Getting data from Arcgis REST API.
 #######################################################
 
-non_comparison_variables = variables['noncomparison_variables']
-
-data = enrich(study_areas=[{"geometry": {"x":x_lon,"y":y_lat}, "areaType":"RingBuffer","bufferUnits":"Miles","bufferRadii":[radius]}],
-              analysis_variables=list(non_comparison_variables.keys()),
-              return_geometry=False)
-
-if type(data) == dict:
-    if data['messages'][0]['type'] == 'esriJobMessageTypeError':
-        print('!!! Error with Arcgis api !!!')
-        sys.exit()
-if data['TOTPOP_CY'][0] == 0:
-        print('!!! Do not run if there is no population !!!')
-        sys.exit()
-
-#Drop useless columns
-non_comparison_df = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
-                          'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData', 'sourceCountry'])
-
-
-# Calculate owner, renter, vacancy rate by dividing by total housing units
-non_comparison_df['OwnerOccupancyRate'] = round(non_comparison_df['OWNER_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
-non_comparison_df['RenterOccupancyRate'] = round(non_comparison_df['RENTER_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
-non_comparison_df['VacancyRate'] = round(non_comparison_df['VACANT_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
-non_comparison_df = non_comparison_df.drop(columns=['OWNER_CY','RENTER_CY','RENTER_CY'])
-
-
-
-# Get top 5 Employment Industries
-employment_industry_variables = variables['employment_industry_variables']
-employment_industry_dict = non_comparison_df[list(employment_industry_variables.keys())].to_dict('records')[0]
-employment_industry_dict = {k: v for k, v in sorted(employment_industry_dict.items(), key=lambda item: item[1], reverse=True)}
-
-# Exclude top 5 Employment Industries variables. Index starts at 0
-drop_employment_variables = list(employment_industry_dict)[5:]
-
-non_comparison_df = non_comparison_df.drop(columns=drop_employment_variables)
+# non_comparison_variables = variables['noncomparison_variables']
+#
+# data = enrich(study_areas=[{"geometry": {"x":x_lon,"y":y_lat}, "areaType":"RingBuffer","bufferUnits":"Miles","bufferRadii":[radius]}],
+#               analysis_variables=list(non_comparison_variables.keys()),
+#               return_geometry=False)
+#
+# if type(data) == dict:
+#     if data['messages'][0]['type'] == 'esriJobMessageTypeError':
+#         print('!!! Error with Arcgis api !!!')
+#         sys.exit()
+# if data['TOTPOP_CY'][0] == 0:
+#         print('!!! Do not run if there is no population !!!')
+#         sys.exit()
+#
+# #Drop useless columns
+# non_comparison_df = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
+#                           'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData', 'sourceCountry'])
+#
+#
+# # Calculate owner, renter, vacancy rate by dividing by total housing units
+# non_comparison_df['OwnerOccupancyRate'] = round(non_comparison_df['OWNER_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
+# non_comparison_df['RenterOccupancyRate'] = round(non_comparison_df['RENTER_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
+# non_comparison_df['VacancyRate'] = round(non_comparison_df['VACANT_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
+# non_comparison_df = non_comparison_df.drop(columns=['OWNER_CY','RENTER_CY','RENTER_CY'])
+#
+#
+#
+# # Get top 5 Employment Industries
+# employment_industry_variables = variables['employment_industry_variables']
+# employment_industry_dict = non_comparison_df[list(employment_industry_variables.keys())].to_dict('records')[0]
+# employment_industry_dict = {k: v for k, v in sorted(employment_industry_dict.items(), key=lambda item: item[1], reverse=True)}
+#
+# # Exclude top 5 Employment Industries variables. Index starts at 0
+# drop_employment_variables = list(employment_industry_dict)[5:]
+#
+# non_comparison_df = non_comparison_df.drop(columns=drop_employment_variables)
 
 
 # Get comparison data
@@ -117,16 +118,22 @@ bls_unemployment_multiplier = pd.read_sql_query("""
                                                 or (Geo_ID =  {} and Geo_Type =  'US.States' ) 
                                                 or (Geo_ID =  '999' ) 
                                                 """.format(msaid,stateid), create_engine(aws_string))
-
+usa_multiplier = bls_unemployment_multiplier[bls_unemployment_multiplier['Geo_Type'] == 'US.WholeUSA'].iloc[0]['Unemployment_multiplier']
 if 'US.CBSA' in bls_unemployment_multiplier['Geo_Type'].values:
    unemployment_multiplier = bls_unemployment_multiplier[bls_unemployment_multiplier['Geo_Type'] == 'US.CBSA'].iloc[0]['Unemployment_multiplier']
 elif 'US.States' in bls_unemployment_multiplier['Geo_Type'].values:
     unemployment_multiplier = bls_unemployment_multiplier[bls_unemployment_multiplier['Geo_Type'] == 'US.States'].iloc[0]['Unemployment_multiplier']
 else:
-    unemployment_multiplier = bls_unemployment_multiplier[bls_unemployment_multiplier['Geo_Type'] == 'US.WholeUSA'].iloc[0]['Unemployment_multiplier']
+    unemployment_multiplier = usa_multiplier
 
 #Truncate unemployment rate to 1 decimal point without rounding
-data['UNEMPRT_CY'] = (data['UNEMPRT_CY'] * unemployment_multiplier).apply(lambda x: math.floor(x * 10 ** 1) / 10 ** 1)
+for i,row in data.iterrows():
+    if row['StdGeographyLevel'] == 'US.WholeUSA':
+        data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * usa_multiplier) * 10 ** 1) / 10 ** 1
+    else:
+        data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * unemployment_multiplier) * 10 ** 1) / 10 ** 1
+
+# data['UNEMPRT_CY'] = (data['UNEMPRT_CY'] * unemployment_multiplier).apply(lambda x: math.floor(x * 10 ** 1) / 10 ** 1)
 
 #Drop useless columns
 comparison_df = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
