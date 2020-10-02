@@ -40,42 +40,42 @@ y_lat = google_address.current_result.lat
 # Getting data from Arcgis REST API.
 #######################################################
 
-# non_comparison_variables = variables['noncomparison_variables']
-#
-# data = enrich(study_areas=[{"geometry": {"x":x_lon,"y":y_lat}, "areaType":"RingBuffer","bufferUnits":"Miles","bufferRadii":[radius]}],
-#               analysis_variables=list(non_comparison_variables.keys()),
-#               return_geometry=False)
-#
-# if type(data) == dict:
-#     if data['messages'][0]['type'] == 'esriJobMessageTypeError':
-#         print('!!! Error with Arcgis api !!!')
-#         sys.exit()
-# if data['TOTPOP_CY'][0] == 0:
-#         print('!!! Do not run if there is no population !!!')
-#         sys.exit()
-#
-# #Drop useless columns
-# non_comparison_df = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
-#                           'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData', 'sourceCountry'])
-#
-#
-# # Calculate owner, renter, vacancy rate by dividing by total housing units
-# non_comparison_df['OwnerOccupancyRate'] = round(non_comparison_df['OWNER_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
-# non_comparison_df['RenterOccupancyRate'] = round(non_comparison_df['RENTER_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
-# non_comparison_df['VacancyRate'] = round(non_comparison_df['VACANT_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
-# non_comparison_df = non_comparison_df.drop(columns=['OWNER_CY','RENTER_CY','RENTER_CY'])
-#
-#
-#
-# # Get top 5 Employment Industries
-# employment_industry_variables = variables['employment_industry_variables']
-# employment_industry_dict = non_comparison_df[list(employment_industry_variables.keys())].to_dict('records')[0]
-# employment_industry_dict = {k: v for k, v in sorted(employment_industry_dict.items(), key=lambda item: item[1], reverse=True)}
-#
-# # Exclude top 5 Employment Industries variables. Index starts at 0
-# drop_employment_variables = list(employment_industry_dict)[5:]
-#
-# non_comparison_df = non_comparison_df.drop(columns=drop_employment_variables)
+non_comparison_variables = variables['noncomparison_variables']
+
+data = enrich(study_areas=[{"geometry": {"x":x_lon,"y":y_lat}, "areaType":"RingBuffer","bufferUnits":"Miles","bufferRadii":[radius]}],
+              analysis_variables=list(non_comparison_variables.keys()),
+              return_geometry=False)
+
+if type(data) == dict:
+    if data['messages'][0]['type'] == 'esriJobMessageTypeError':
+        print('!!! Error with Arcgis api !!!')
+        sys.exit()
+if data['TOTPOP_CY'][0] == 0:
+        print('!!! Do not run if there is no population !!!')
+        sys.exit()
+
+#Drop useless columns
+non_comparison_df = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
+                          'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData', 'sourceCountry'])
+
+
+# Calculate owner, renter, vacancy rate by dividing by total housing units
+non_comparison_df['OwnerOccupancyRate'] = round(non_comparison_df['OWNER_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
+non_comparison_df['RenterOccupancyRate'] = round(non_comparison_df['RENTER_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
+non_comparison_df['VacancyRate'] = round(non_comparison_df['VACANT_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
+non_comparison_df = non_comparison_df.drop(columns=['OWNER_CY','RENTER_CY','RENTER_CY'])
+
+
+
+# Get top 5 Employment Industries
+employment_industry_variables = variables['employment_industry_variables']
+employment_industry_dict = non_comparison_df[list(employment_industry_variables.keys())].to_dict('records')[0]
+employment_industry_dict = {k: v for k, v in sorted(employment_industry_dict.items(), key=lambda item: item[1], reverse=True)}
+
+# Exclude top 5 Employment Industries variables. Index starts at 0
+drop_employment_variables = list(employment_industry_dict)[5:]
+
+non_comparison_df = non_comparison_df.drop(columns=drop_employment_variables)
 
 
 # Get comparison data
@@ -83,7 +83,7 @@ comparison_variables = variables['comparison_variables']
 
 data = enrich(study_areas=[{"address":{"text":address}}],
               analysis_variables=list(comparison_variables.keys()),
-              comparison_levels=['US.WholeUSA','US.CBSA','US.Counties','US.Tracts'],
+              comparison_levels=['US.WholeUSA','US.CBSA','US.Counties','US.BlockGroups'],
               return_geometry=False)
 
 #The folling section was added because ESRI unemployment data is updated once a year. So, to keep it update to date,
@@ -133,7 +133,6 @@ for i,row in data.iterrows():
     else:
         data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * unemployment_multiplier) * 10 ** 1) / 10 ** 1
 
-# data['UNEMPRT_CY'] = (data['UNEMPRT_CY'] * unemployment_multiplier).apply(lambda x: math.floor(x * 10 ** 1) / 10 ** 1)
 
 #Drop useless columns
 comparison_df = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
@@ -173,35 +172,35 @@ with pd.ExcelWriter('testdata/arcgisoutput.xlsx') as writer:
 
 
 
-# ######################################################
-# # Getting rental data from RealtyMole. NOTE: Below is how I made requests to the API. I commented out this section and am
-# # just using sample data for this example. You can see I stored the response data into "realtymoledata50.json". And I pasted
-# # the data into "realtymolesampledata.txt"
-# ######################################################
-#
-# with open("./un_pw.json", "r") as file:
-#     realtymole = json.load(file)['realtymole_yahoo']
-#
-# url = "https://realty-mole-property-api.p.rapidapi.com/rentalListings"
-#
-# querystring = {"radius":radius,
-#                "limit":50,
-#                "longitude":x_lon,
-#                "latitude":y_lat}
-#
-# headers = {
-#     'x-rapidapi-host': "realty-mole-property-api.p.rapidapi.com",
-#     'x-rapidapi-key': realtymole
-#     }
-#
-# response = requests.request("GET", url, headers=headers, params=querystring)
-#
-# if response.status_code != 200:
-#     print('*ScopeOutLog* !!! ERROR with REALTYMOLE API !!!!')
-# else:
-#     print('*ScopeOutLog* SUCCESS - REALTY MOLE')
-#     with open("testdata/RENT_{}.json".format(address), 'w') as file:
-#         file.write(json.dumps(json.loads(response.text)))
+######################################################
+# Getting rental data from RealtyMole. NOTE: Below is how I made requests to the API. I commented out this section and am
+# just using sample data for this example. You can see I stored the response data into "realtymoledata50.json". And I pasted
+# the data into "realtymolesampledata.txt"
+######################################################
+
+with open("./un_pw.json", "r") as file:
+    realtymole = json.load(file)['realtymole_yahoo']
+
+url = "https://realty-mole-property-api.p.rapidapi.com/rentalListings"
+
+querystring = {"radius":radius,
+               "limit":50,
+               "longitude":x_lon,
+               "latitude":y_lat}
+
+headers = {
+    'x-rapidapi-host': "realty-mole-property-api.p.rapidapi.com",
+    'x-rapidapi-key': realtymole
+    }
+
+response = requests.request("GET", url, headers=headers, params=querystring)
+
+if response.status_code != 200:
+    print('*ScopeOutLog* !!! ERROR with REALTYMOLE API !!!!')
+else:
+    print('*ScopeOutLog* SUCCESS - REALTY MOLE')
+    with open("testdata/RENT_{}.json".format(address), 'w') as file:
+        file.write(json.dumps(json.loads(response.text)))
 
 
 ##### Get sample data instead of make API call above ####
