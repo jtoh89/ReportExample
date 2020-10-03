@@ -50,7 +50,6 @@ variables = {
         'TOTHU_CY':'2020 Total Housing Units',
         'X3007_I':'Property Tax Index',
         'X3008_I':'Homeowner Insurance Index',
-        'FLOODRSKPT':'Flood Risk',
         'HSGRAD_CY_P':'High School Diploma',
         'SMCOLL_CY_P':'Some College/No Degree',
         'ASSCDEG_CY_P':'Associate''s Degree',
