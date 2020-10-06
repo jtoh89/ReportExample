@@ -18,7 +18,7 @@ from sqlalchemy import create_engine
 # #######################################################
 #
 #
-address = '2503 harvard ave, independence, mo 64052'
+address = '875 S Olive St, Anaheim, CA 92805'
 radius = 1
 
 gis = GIS('https://www.arcgis.com', 'arcgis_python', 'P@ssword123')
@@ -33,7 +33,6 @@ if google_address.error:
 
 x_lon = google_address.current_result.lng
 y_lat = google_address.current_result.lat
-
 
 
 #######################################################
@@ -66,11 +65,11 @@ non_comparison_df['VacancyRate'] = round(non_comparison_df['VACANT_CY'] / non_co
 non_comparison_df = non_comparison_df.drop(columns=['OWNER_CY','RENTER_CY','RENTER_CY'])
 
 
-
 # Get top 5 Employment Industries
 employment_industry_variables = variables['employment_industry_variables']
 employment_industry_dict = non_comparison_df[list(employment_industry_variables.keys())].to_dict('records')[0]
 employment_industry_dict = {k: v for k, v in sorted(employment_industry_dict.items(), key=lambda item: item[1], reverse=True)}
+
 
 # Exclude top 5 Employment Industries variables. Index starts at 0
 drop_employment_variables = list(employment_industry_dict)[5:]
@@ -90,11 +89,12 @@ data = enrich(study_areas=[{"address":{"text":address}}],
 #So, to keep it updated, we will need to get a "multiplier" that will adjust all the unemployment value according
 #to the region.
 # There is a discrepancy between some MSAIDs between ESRI and BLS. This is to convert ESRI MSAIDs to NECTAIDS
+
 Esri_to_NECTAID_conversion = {
 '12620':'70750','12700':'70900','12740':'71050','13540':'71350','13620':'71500','14460':'71650','14860':'71950','15540':'72400','18180':'72700','19430':'19380','25540':'73450',
 '28300':'73750','29060':'73900','30100':'74350','30340':'74650','31700':'74950','35300':'75700','35980':'76450','36837':'36860','38340':'76600','38860':'76750','39150':'39140',
-'39300':'77200','40860':'77650','44140':'78100','45860':'78400','47240':'78500','49060':'11680','49340':'79600'
-}
+'39300':'77200','40860':'77650','44140':'78100','45860':'78400','47240':'78500','49060':'11680','49340':'79600'}
+
 
 msaid = data[data['StdGeographyLevel'] == 'US.CBSA']['StdGeographyID'].iloc[0]
 stateid = data[data['StdGeographyLevel'] == 'US.Counties']['StdGeographyID'].iloc[0][:2]
@@ -105,20 +105,20 @@ if msaid in Esri_to_NECTAID_conversion.keys():
 
 
 # use state level adjustment if msa isnt available
-
-
-
 with open("./un_pw.json", "r") as file:
     aws_string = json.load(file)['aws_mysql']
 
 bls_unemployment_multiplier = pd.read_sql_query("""
                                                 select Geo_Type, Unemployment_multiplier
-                                                from ESRI_Unemployment_Multiplier 
+                                                from ESRI_Unemployment_Multiplier
                                                 where (Geo_ID = {} and Geo_Type =  'US.CBSA' )
-                                                or (Geo_ID =  {} and Geo_Type =  'US.States' ) 
-                                                or (Geo_ID =  '999' ) 
+                                                or (Geo_ID =  {} and Geo_Type =  'US.States' )
+                                                or (Geo_ID =  '999')
                                                 """.format(msaid,stateid), create_engine(aws_string))
+
 usa_multiplier = bls_unemployment_multiplier[bls_unemployment_multiplier['Geo_Type'] == 'US.WholeUSA'].iloc[0]['Unemployment_multiplier']
+state_multiplier = bls_unemployment_multiplier[bls_unemployment_multiplier['Geo_Type'] == 'US.States'].iloc[0]['Unemployment_multiplier']
+
 if 'US.CBSA' in bls_unemployment_multiplier['Geo_Type'].values:
    unemployment_multiplier = bls_unemployment_multiplier[bls_unemployment_multiplier['Geo_Type'] == 'US.CBSA'].iloc[0]['Unemployment_multiplier']
 elif 'US.States' in bls_unemployment_multiplier['Geo_Type'].values:
@@ -136,8 +136,7 @@ for i,row in data.iterrows():
 
 #Drop useless columns
 comparison_df = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
-                          'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData',
-                          'sourceCountry'])
+                          'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData', 'sourceCountry'])
 
 
 comparison_df['StdGeographyName'] = comparison_df['StdGeographyName'].str.replace('Metropolitan Statistical Area','MSA')
@@ -145,7 +144,8 @@ comparison_df['StdGeographyName'] = comparison_df['StdGeographyName'].str.replac
 
 # Convert crime index to victims per 100,000 people crime rate.
 # These are current national crime rates per 100,000 people. This changes once a year.
-crime_index_multiplier = {'CRMCYMURD':5, 'CRMCYROBB':86.2, 'CRMCYRAPE':30.9, 'CRMCYASST':246.8}
+# Data found at https://www.statista.com/topics/1750/violent-crime-in-the-us/#dossierSummary__chapter2
+crime_index_multiplier = {'CRMCYMURD':5, 'CRMCYROBB':81.6, 'CRMCYRAPE':29.9, 'CRMCYASST':250.2}
 
 
 # Convert crime index to victims per 100,000 people crime rate.
@@ -172,35 +172,35 @@ with pd.ExcelWriter('testdata/arcgisoutput.xlsx') as writer:
 
 
 
-######################################################
-# Getting rental data from RealtyMole. NOTE: Below is how I made requests to the API. I commented out this section and am
-# just using sample data for this example. You can see I stored the response data into "realtymoledata50.json". And I pasted
-# the data into "realtymolesampledata.txt"
-######################################################
-
-with open("./un_pw.json", "r") as file:
-    realtymole = json.load(file)['realtymole_yahoo']
-
-url = "https://realty-mole-property-api.p.rapidapi.com/rentalListings"
-
-querystring = {"radius":radius,
-               "limit":50,
-               "longitude":x_lon,
-               "latitude":y_lat}
-
-headers = {
-    'x-rapidapi-host': "realty-mole-property-api.p.rapidapi.com",
-    'x-rapidapi-key': realtymole
-    }
-
-response = requests.request("GET", url, headers=headers, params=querystring)
-
-if response.status_code != 200:
-    print('*ScopeOutLog* !!! ERROR with REALTYMOLE API !!!!')
-else:
-    print('*ScopeOutLog* SUCCESS - REALTY MOLE')
-    with open("testdata/RENT_{}.json".format(address), 'w') as file:
-        file.write(json.dumps(json.loads(response.text)))
+# ######################################################
+# # Getting rental data from RealtyMole. NOTE: Below is how I made requests to the API. I commented out this section and am
+# # just using sample data for this example. You can see I stored the response data into "realtymoledata50.json". And I pasted
+# # the data into "realtymolesampledata.txt"
+# ######################################################
+#
+# with open("./un_pw.json", "r") as file:
+#     realtymole = json.load(file)['realtymole_yahoo']
+#
+# url = "https://realty-mole-property-api.p.rapidapi.com/rentalListings"
+#
+# querystring = {"radius":radius,
+#                "limit":50,
+#                "longitude":x_lon,
+#                "latitude":y_lat}
+#
+# headers = {
+#     'x-rapidapi-host': "realty-mole-property-api.p.rapidapi.com",
+#     'x-rapidapi-key': realtymole
+#     }
+#
+# response = requests.request("GET", url, headers=headers, params=querystring)
+#
+# if response.status_code != 200:
+#     print('*ScopeOutLog* !!! ERROR with REALTYMOLE API !!!!')
+# else:
+#     print('*ScopeOutLog* SUCCESS - REALTY MOLE')
+#     with open("testdata/RENT_{}.json".format(address), 'w') as file:
+#         file.write(json.dumps(json.loads(response.text)))
 
 
 ##### Get sample data instead of make API call above ####
@@ -210,7 +210,7 @@ writer = pd.ExcelWriter('testdata/rentalsummary.xlsx')
 
 bedroom_rent = pd.DataFrame(columns=['bedrooms','25thPercentile','75thPercentile','averagerent','medianrent','samplesize'])
 
-# calculate values for box plot
+# calculate values for rental summary
 for i in [0,1,2,3,4,5,6]:
     bedroom_data = df[df['bedrooms'] == i]
 
@@ -311,21 +311,20 @@ for i,comp in rental_comps.iterrows():
 rental_comps.sort_values(by=['DistanceFromProperty']).to_excel(writer, 'rentalcomps')
 
 
-
 # calculate price per sqft and exclude outliers for graph
 bedroomscatterplot = rental_comps[(rental_comps['pricepersqft'] > 0)]
-bedroomscatterplot = bedroomscatterplot[(bedroomscatterplot['bedrooms'] > 0)]
+bedroomscatterplot = bedroomscatterplot[(bedroomscatterplot['bedrooms'] >= 0)]
 
+# calculate z-score for each rent. Anything with z-score > 3 is considered outlier
 outliers = []
-threshold = 3
+z_score_threshold = 3
 mean_1 = np.mean(bedroomscatterplot['pricepersqft'])
 std_1 = np.std(bedroomscatterplot['pricepersqft'])
 
-
-for price in bedroomscatterplot['pricepersqft']:
-    z_score = (price - mean_1) / std_1
-    if np.abs(z_score) > threshold:
-        outliers.append(price)
+for i,row in bedroomscatterplot.iterrows():
+    z_score = (row['pricepersqft'] - mean_1) / std_1
+    if np.abs(z_score) > z_score_threshold:
+        bedroomscatterplot.drop(i, inplace=True)
 
 bedroomscatterplot[['formattedAddress','squareFootage','bedrooms','bathrooms','price','propertyType','pricepersqft']].to_excel(writer, 'pricepersqft')
 

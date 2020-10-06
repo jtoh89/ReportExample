@@ -76,27 +76,27 @@ variables = {
         'INDOTSV_CY_P':'Emp Ind: Other Services',
         'INDPUBL_CY_P':'Emp Ind: Public Administration'
         },
-        'employment_industry_variables':{
+    'employment_industry_variables':{
 
-            'INDAGRI_CY_P': 'Emp Ind: Agriculture/Forestry/Fishing/Hunting',
-            'INDMIN_CY_P': 'Emp Ind: Mining/Quarrying/Oil & Gas Extraction',
-            'INDCONS_CY_P': 'Emp Ind: Construction',
-            'INDMANU_CY_P': 'Emp Ind: Manufacturing',
-            'INDWHTR_CY_P': 'Emp Ind: Wholesale Trade',
-            'INDRTTR_CY_P': 'Emp Ind: Retail Trade',
-            'INDTRAN_CY_P': 'Emp Ind: Transportation/Warehousing',
-            'INDUTIL_CY_P': 'Emp Ind: Utilities',
-            'INDINFO_CY_P': 'Emp Ind: Information (non-tech)',
-            'INDFIN_CY_P': 'Emp Ind: Finance/Insurance',
-            'INDRE_CY_P': 'Emp Ind: Real Estate/Rental/Leasing',
-            'INDTECH_CY_P': 'Emp Ind: Professional/Scientific/Technology',
-            'INDMGMT_CY_P': 'Emp Ind: Management of Companies/Enterprises',
-            'INDADMN_CY_P': 'Emp Ind: Admin/Support/Waste Management Services',
-            'INDEDUC_CY_P': 'Emp Ind: Educational Services',
-            'INDHLTH_CY_P': 'Emp Ind: Health Care/Social Assistance',
-            'INDARTS_CY_P': 'Emp Ind: Arts/Entertainment/Recreation',
-            'INDFOOD_CY_P': 'Emp Ind: Accommodation/Food Services',
-            'INDOTSV_CY_P': 'Emp Ind: Other Services',
-            'INDPUBL_CY_P': 'Emp Ind: Public Administration'
-        }
+        'INDAGRI_CY_P': 'Emp Ind: Agriculture/Forestry/Fishing/Hunting',
+        'INDMIN_CY_P': 'Emp Ind: Mining/Quarrying/Oil & Gas Extraction',
+        'INDCONS_CY_P': 'Emp Ind: Construction',
+        'INDMANU_CY_P': 'Emp Ind: Manufacturing',
+        'INDWHTR_CY_P': 'Emp Ind: Wholesale Trade',
+        'INDRTTR_CY_P': 'Emp Ind: Retail Trade',
+        'INDTRAN_CY_P': 'Emp Ind: Transportation/Warehousing',
+        'INDUTIL_CY_P': 'Emp Ind: Utilities',
+        'INDINFO_CY_P': 'Emp Ind: Information (non-tech)',
+        'INDFIN_CY_P': 'Emp Ind: Finance/Insurance',
+        'INDRE_CY_P': 'Emp Ind: Real Estate/Rental/Leasing',
+        'INDTECH_CY_P': 'Emp Ind: Professional/Scientific/Technology',
+        'INDMGMT_CY_P': 'Emp Ind: Management of Companies/Enterprises',
+        'INDADMN_CY_P': 'Emp Ind: Admin/Support/Waste Management Services',
+        'INDEDUC_CY_P': 'Emp Ind: Educational Services',
+        'INDHLTH_CY_P': 'Emp Ind: Health Care/Social Assistance',
+        'INDARTS_CY_P': 'Emp Ind: Arts/Entertainment/Recreation',
+        'INDFOOD_CY_P': 'Emp Ind: Accommodation/Food Services',
+        'INDOTSV_CY_P': 'Emp Ind: Other Services',
+        'INDPUBL_CY_P': 'Emp Ind: Public Administration'
+    }
 }
