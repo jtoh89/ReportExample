@@ -16,9 +16,9 @@ from sqlalchemy import create_engine
 # #######################################################
 # # Provide address and radius value from Arcgis REST API.
 # #######################################################
-#
-#
-address = '875 S Olive St, Anaheim, CA 92805'
+
+
+address = '875 S Olive St, Anaheim, CA'
 radius = 1
 
 gis = GIS('https://www.arcgis.com', 'arcgis_python', 'P@ssword123')
@@ -82,7 +82,7 @@ comparison_variables = variables['comparison_variables']
 
 data = enrich(study_areas=[{"address":{"text":address}}],
               analysis_variables=list(comparison_variables.keys()),
-              comparison_levels=['US.WholeUSA','US.CBSA','US.Counties','US.BlockGroups'],
+              comparison_levels=['US.WholeUSA','US.CBSA','US.Counties','US.Tracts'],
               return_geometry=False)
 
 #The folling section was added because ESRI unemployment data is updated once a year. So, to keep it update to date,
@@ -171,36 +171,35 @@ with pd.ExcelWriter('testdata/arcgisoutput.xlsx') as writer:
 
 
 
+######################################################
+# Getting rental data from RealtyMole. NOTE: Below is how I made requests to the API. I commented out this section and am
+# just using sample data for this example. You can see I stored the response data into "realtymoledata50.json". And I pasted
+# the data into "realtymolesampledata.txt"
+######################################################
 
-# ######################################################
-# # Getting rental data from RealtyMole. NOTE: Below is how I made requests to the API. I commented out this section and am
-# # just using sample data for this example. You can see I stored the response data into "realtymoledata50.json". And I pasted
-# # the data into "realtymolesampledata.txt"
-# ######################################################
-#
-# with open("./un_pw.json", "r") as file:
-#     realtymole = json.load(file)['realtymole_yahoo']
-#
-# url = "https://realty-mole-property-api.p.rapidapi.com/rentalListings"
-#
-# querystring = {"radius":radius,
-#                "limit":50,
-#                "longitude":x_lon,
-#                "latitude":y_lat}
-#
-# headers = {
-#     'x-rapidapi-host': "realty-mole-property-api.p.rapidapi.com",
-#     'x-rapidapi-key': realtymole
-#     }
-#
-# response = requests.request("GET", url, headers=headers, params=querystring)
-#
-# if response.status_code != 200:
-#     print('*ScopeOutLog* !!! ERROR with REALTYMOLE API !!!!')
-# else:
-#     print('*ScopeOutLog* SUCCESS - REALTY MOLE')
-#     with open("testdata/RENT_{}.json".format(address), 'w') as file:
-#         file.write(json.dumps(json.loads(response.text)))
+with open("./un_pw.json", "r") as file:
+    realtymole = json.load(file)['realtymole_yahoo']
+
+url = "https://realty-mole-property-api.p.rapidapi.com/rentalListings"
+
+querystring = {"radius":radius,
+               "limit":50,
+               "longitude":x_lon,
+               "latitude":y_lat}
+
+headers = {
+    'x-rapidapi-host': "realty-mole-property-api.p.rapidapi.com",
+    'x-rapidapi-key': realtymole
+    }
+
+response = requests.request("GET", url, headers=headers, params=querystring)
+
+if response.status_code != 200:
+    print('*ScopeOutLog* !!! ERROR with REALTYMOLE API !!!!')
+else:
+    print('*ScopeOutLog* SUCCESS - REALTY MOLE')
+    with open("testdata/RENT_{}.json".format(address), 'w') as file:
+        file.write(json.dumps(json.loads(response.text)))
 
 
 ##### Get sample data instead of make API call above ####
