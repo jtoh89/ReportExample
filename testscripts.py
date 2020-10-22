@@ -18,7 +18,7 @@ from sqlalchemy import create_engine
 # #######################################################
 
 
-address = '875 S Olive St, Anaheim, CA'
+address = '47 W Broadway, Bangor, ME 04401'
 radius = 1
 
 gis = GIS('https://www.arcgis.com', 'arcgis_python', 'P@ssword123')
@@ -33,62 +33,26 @@ if google_address.error:
 
 x_lon = google_address.current_result.lng
 y_lat = google_address.current_result.lat
-
+zipcode = google_address.current_result.postal
 
 #######################################################
 # Getting data from Arcgis REST API.
 #######################################################
 
-non_comparison_variables = variables['noncomparison_variables']
-
-data = enrich(study_areas=[{"geometry": {"x":x_lon,"y":y_lat}, "areaType":"RingBuffer","bufferUnits":"Miles","bufferRadii":[radius]}],
-              analysis_variables=list(non_comparison_variables.keys()),
-              return_geometry=False)
-
-if type(data) == dict:
-    if data['messages'][0]['type'] == 'esriJobMessageTypeError':
-        print('!!! Error with Arcgis api !!!')
-        sys.exit()
-if data['TOTPOP_CY'][0] == 0:
-        print('!!! Do not run if there is no population !!!')
-        sys.exit()
-
-#Drop useless columns
-non_comparison_df = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
-                          'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData', 'sourceCountry'])
-
-
-# Calculate owner, renter, vacancy rate by dividing by total housing units
-non_comparison_df['OwnerOccupancyRate'] = round(non_comparison_df['OWNER_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
-non_comparison_df['RenterOccupancyRate'] = round(non_comparison_df['RENTER_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
-non_comparison_df['VacancyRate'] = round(non_comparison_df['VACANT_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
-non_comparison_df = non_comparison_df.drop(columns=['OWNER_CY','RENTER_CY','RENTER_CY'])
-
-
-# Get top 5 Employment Industries
-employment_industry_variables = variables['employment_industry_variables']
-employment_industry_dict = non_comparison_df[list(employment_industry_variables.keys())].to_dict('records')[0]
-employment_industry_dict = {k: v for k, v in sorted(employment_industry_dict.items(), key=lambda item: item[1], reverse=True)}
-
-
-# Exclude top 5 Employment Industries variables. Index starts at 0
-drop_employment_variables = list(employment_industry_dict)[5:]
-
-non_comparison_df = non_comparison_df.drop(columns=drop_employment_variables)
-
-
 # Get comparison data
 comparison_variables = variables['comparison_variables']
 
-data = enrich(study_areas=[{"address":{"text":address}}],
+
+data = enrich(study_areas=[{"geometry": {"x":x_lon,"y":y_lat}, "areaType":"RingBuffer","bufferUnits":"Miles","bufferRadii":[radius]}],
               analysis_variables=list(comparison_variables.keys()),
               comparison_levels=['US.WholeUSA','US.CBSA','US.Counties','US.Tracts'],
               return_geometry=False)
+data = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
+                          'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData', 'sourceCountry'])
 
-#The folling section was added because ESRI unemployment data is updated once a year. So, to keep it update to date,
-#So, to keep it updated, we will need to get a "multiplier" that will adjust all the unemployment value according
-#to the region.
-# There is a discrepancy between some MSAIDs between ESRI and BLS. This is to convert ESRI MSAIDs to NECTAIDS
+
+# ESRI provides MSA IDs (US.CBSA) that can sometimes be different from the official US MSA IDs.
+# The following converts ESRI IDs
 
 Esri_to_NECTAID_conversion = {
 '12620':'70750','12700':'70900','12740':'71050','13540':'71350','13620':'71500','14460':'71650','14860':'71950','15540':'72400','18180':'72700','19430':'19380','25540':'73450',
@@ -97,14 +61,18 @@ Esri_to_NECTAID_conversion = {
 
 
 msaid = data[data['StdGeographyLevel'] == 'US.CBSA']['StdGeographyID'].iloc[0]
-stateid = data[data['StdGeographyLevel'] == 'US.Counties']['StdGeographyID'].iloc[0][:2]
+countyid = data[data['StdGeographyLevel'] == 'US.Counties']['StdGeographyID'].iloc[0]
+stateid = countyid[:2]
 
 if msaid in Esri_to_NECTAID_conversion.keys():
     data.loc[data['StdGeographyLevel'] == 'US.CBSA', 'StdGeographyID'] = Esri_to_NECTAID_conversion[msaid]
     msaid = Esri_to_NECTAID_conversion[msaid]
 
 
-# use state level adjustment if msa isnt available
+#The folling section was added because ESRI unemployment data is updated once a year.
+#So, to keep it updated, we will need to get a "multiplier" that will adjust all the unemployment value according
+#to the region.
+
 with open("./un_pw.json", "r") as file:
     aws_string = json.load(file)['aws_mysql']
 
@@ -134,10 +102,9 @@ for i,row in data.iterrows():
         data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * unemployment_multiplier) * 10 ** 1) / 10 ** 1
 
 
-#Drop useless columns
-comparison_df = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
-                          'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData', 'sourceCountry'])
 
+#Drop useless columns
+comparison_df = data
 
 comparison_df['StdGeographyName'] = comparison_df['StdGeographyName'].str.replace('Metropolitan Statistical Area','MSA')
 
@@ -163,6 +130,62 @@ for i, row in comparison_df.iterrows():
 
 
 
+
+
+
+# Get non comparison data
+
+non_comparison_variables = variables['noncomparison_variables']
+
+data = enrich(study_areas=[{"geometry": {"x":x_lon,"y":y_lat}, "areaType":"RingBuffer","bufferUnits":"Miles","bufferRadii":[radius]}],
+              analysis_variables=list(non_comparison_variables.keys()),
+              return_geometry=False)
+
+if type(data) == dict:
+    if data['messages'][0]['type'] == 'esriJobMessageTypeError':
+        print('!!! Error with Arcgis api !!!')
+        sys.exit()
+if data['TOTPOP_CY'][0] == 0:
+        print('!!! Do not run if there is no population !!!')
+        sys.exit()
+
+#Drop useless columns
+non_comparison_df = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
+                          'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData', 'sourceCountry'])
+
+
+# Set Housing Affordability to one of these: Very High, High, Low, Very Low
+
+if data['INCMORT_CY'][0] < 15:
+    non_comparison_df['HousingAffordability'] = 'Very High'
+elif data['INCMORT_CY'][0] < 30:
+    non_comparison_df['HousingAffordability'] = 'High'
+elif data['INCMORT_CY'][0] < 45:
+    non_comparison_df['HousingAffordability'] = 'Low'
+else:
+    non_comparison_df['HousingAffordability'] = 'Very Low'
+
+
+# Calculate owner, renter, vacancy rate by dividing by total housing units
+non_comparison_df['OwnerOccupancyRate'] = round(non_comparison_df['OWNER_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
+non_comparison_df['RenterOccupancyRate'] = round(non_comparison_df['RENTER_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
+non_comparison_df['VacancyRate'] = round(non_comparison_df['VACANT_CY'] / non_comparison_df['TOTHU_CY'] * 100, 2)
+non_comparison_df = non_comparison_df.drop(columns=['OWNER_CY','RENTER_CY','RENTER_CY'])
+
+
+# Get top 5 Employment Industries
+employment_industry_variables = variables['employment_industry_variables']
+employment_industry_dict = non_comparison_df[list(employment_industry_variables.keys())].to_dict('records')[0]
+employment_industry_dict = {k: v for k, v in sorted(employment_industry_dict.items(), key=lambda item: item[1], reverse=True)}
+
+
+
+# Exclude top 5 Employment Industries variables. Index starts at 0
+drop_employment_variables = list(employment_industry_dict)[5:]
+
+non_comparison_df = non_comparison_df.drop(columns=drop_employment_variables)
+
+
 with pd.ExcelWriter('testdata/arcgisoutput.xlsx') as writer:
     non_comparison_df = non_comparison_df.rename(columns=variables['noncomparison_variables'])
     comparison_df = comparison_df.rename(columns=variables['comparison_variables'])
@@ -177,29 +200,29 @@ with pd.ExcelWriter('testdata/arcgisoutput.xlsx') as writer:
 # the data into "realtymolesampledata.txt"
 ######################################################
 
-with open("./un_pw.json", "r") as file:
-    realtymole = json.load(file)['realtymole_yahoo']
-
-url = "https://realty-mole-property-api.p.rapidapi.com/rentalListings"
-
-querystring = {"radius":radius,
-               "limit":50,
-               "longitude":x_lon,
-               "latitude":y_lat}
-
-headers = {
-    'x-rapidapi-host': "realty-mole-property-api.p.rapidapi.com",
-    'x-rapidapi-key': realtymole
-    }
-
-response = requests.request("GET", url, headers=headers, params=querystring)
-
-if response.status_code != 200:
-    print('*ScopeOutLog* !!! ERROR with REALTYMOLE API !!!!')
-else:
-    print('*ScopeOutLog* SUCCESS - REALTY MOLE')
-    with open("testdata/RENT_{}.json".format(address), 'w') as file:
-        file.write(json.dumps(json.loads(response.text)))
+# with open("./un_pw.json", "r") as file:
+#     realtymole = json.load(file)['realtymole_gmail']
+#
+# url = "https://realty-mole-property-api.p.rapidapi.com/rentalListings"
+#
+# querystring = {"radius":radius,
+#                "limit":50,
+#                "longitude":x_lon,
+#                "latitude":y_lat}
+#
+# headers = {
+#     'x-rapidapi-host': "realty-mole-property-api.p.rapidapi.com",
+#     'x-rapidapi-key': realtymole
+#     }
+#
+# response = requests.request("GET", url, headers=headers, params=querystring)
+#
+# if response.status_code != 200:
+#     print('*ScopeOutLog* !!! ERROR with REALTYMOLE API !!!!')
+# else:
+#     print('*ScopeOutLog* SUCCESS - REALTY MOLE')
+#     with open("testdata/RENT_{}.json".format(address), 'w') as file:
+#         file.write(json.dumps(json.loads(response.text)))
 
 
 ##### Get sample data instead of make API call above ####
@@ -321,7 +344,10 @@ mean_1 = np.mean(bedroomscatterplot['pricepersqft'])
 std_1 = np.std(bedroomscatterplot['pricepersqft'])
 
 for i,row in bedroomscatterplot.iterrows():
-    z_score = (row['pricepersqft'] - mean_1) / std_1
+    if std_1 <= 0:
+        z_score = 0
+    else:
+        z_score = (row['pricepersqft'] - mean_1) / std_1
     if np.abs(z_score) > z_score_threshold:
         bedroomscatterplot.drop(i, inplace=True)
 
