@@ -18,7 +18,7 @@ from sqlalchemy import create_engine
 # #######################################################
 
 
-address = '47 W Broadway, Bangor, ME 04401'
+address = '5910 E 300 N, Crawfordsville, IN 47933'
 radius = 1
 
 gis = GIS('https://www.arcgis.com', 'arcgis_python', 'P@ssword123')
@@ -157,13 +157,13 @@ non_comparison_df = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTI
 # Set Housing Affordability to one of these: Very High, High, Low, Very Low
 
 if data['INCMORT_CY'][0] < 15:
-    non_comparison_df['HousingAffordability'] = 'Very High'
-elif data['INCMORT_CY'][0] < 30:
-    non_comparison_df['HousingAffordability'] = 'High'
+    non_comparison_df['HousingAffordability'] = 'Very Affordable'
+elif data['INCMORT_CY'][0] <= 30:
+    non_comparison_df['HousingAffordability'] = 'Affordable'
 elif data['INCMORT_CY'][0] < 45:
-    non_comparison_df['HousingAffordability'] = 'Low'
+    non_comparison_df['HousingAffordability'] = 'Unaffordable'
 else:
-    non_comparison_df['HousingAffordability'] = 'Very Low'
+    non_comparison_df['HousingAffordability'] = 'Very Unaffordable'
 
 
 # Calculate owner, renter, vacancy rate by dividing by total housing units
