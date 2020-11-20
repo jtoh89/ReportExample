@@ -18,7 +18,7 @@ from sqlalchemy import create_engine
 # #######################################################
 
 
-address = '5910 E 300 N, Crawfordsville, IN 47933'
+address = '2220 E 46TH ST, INDIANAPOLIS, IN 46205'
 radius = 1
 
 gis = GIS('https://www.arcgis.com', 'arcgis_python', 'P@ssword123')
@@ -81,7 +81,7 @@ bls_unemployment_multiplier = pd.read_sql_query("""
                                                 from ESRI_Unemployment_Multiplier
                                                 where (Geo_ID = {} and Geo_Type =  'US.CBSA' )
                                                 or (Geo_ID =  {} and Geo_Type =  'US.States' )
-                                                or (Geo_ID =  '999')
+                                                or (Geo_ID =  '99999')
                                                 """.format(msaid,stateid), create_engine(aws_string))
 
 usa_multiplier = bls_unemployment_multiplier[bls_unemployment_multiplier['Geo_Type'] == 'US.WholeUSA'].iloc[0]['Unemployment_multiplier']
