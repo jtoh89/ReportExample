@@ -18,7 +18,7 @@ from sqlalchemy import create_engine
 # #######################################################
 
 
-address = '2220 E 46TH ST, INDIANAPOLIS, IN 46205'
+address = '777 Hollywood Blvd, Dayton, OH 45414'
 radius = 1
 
 gis = GIS('https://www.arcgis.com', 'arcgis_python', 'P@ssword123')
@@ -34,6 +34,7 @@ if google_address.error:
 x_lon = google_address.current_result.lng
 y_lat = google_address.current_result.lat
 zipcode = google_address.current_result.postal
+
 
 #######################################################
 # Getting data from Arcgis REST API.
@@ -51,61 +52,159 @@ data = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType
                           'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData', 'sourceCountry'])
 
 
+
+
 # ESRI provides MSA IDs (US.CBSA) that can sometimes be different from the official US MSA IDs.
 # The following converts ESRI IDs
 
-Esri_to_NECTAID_conversion = {
-'12620':'70750','12700':'70900','12740':'71050','13540':'71350','13620':'71500','14460':'71650','14860':'71950','15540':'72400','18180':'72700','19430':'19380','25540':'73450',
-'28300':'73750','29060':'73900','30100':'74350','30340':'74650','31700':'74950','35300':'75700','35980':'76450','36837':'36860','38340':'76600','38860':'76750','39150':'39140',
-'39300':'77200','40860':'77650','44140':'78100','45860':'78400','47240':'78500','49060':'11680','49340':'79600'}
+# Esri_to_NECTAID_conversion = {
+# '12620':'70750','12700':'70900','12740':'71050','13540':'71350','13620':'71500','14460':'71650','14860':'71950','15540':'72400','18180':'72700','19430':'19380','25540':'73450',
+# '28300':'73750','29060':'73900','30100':'74350','30340':'74650','31700':'74950','35300':'75700','35980':'76450','36837':'36860','38340':'76600','38860':'76750','39150':'39140',
+# '39300':'77200','40860':'77650','44140':'78100','45860':'78400','47240':'78500','49060':'11680','49340':'79600'
+# }
 
-
-msaid = data[data['StdGeographyLevel'] == 'US.CBSA']['StdGeographyID'].iloc[0]
+if 'US.CBSA' in data['StdGeographyLevel']:
+    msaid = data[data['StdGeographyLevel'] == 'US.CBSA']['StdGeographyID'].iloc[0]
+else:
+    msaid = None
 countyid = data[data['StdGeographyLevel'] == 'US.Counties']['StdGeographyID'].iloc[0]
 stateid = countyid[:2]
 
-if msaid in Esri_to_NECTAID_conversion.keys():
-    data.loc[data['StdGeographyLevel'] == 'US.CBSA', 'StdGeographyID'] = Esri_to_NECTAID_conversion[msaid]
-    msaid = Esri_to_NECTAID_conversion[msaid]
+# if msaid in Esri_to_NECTAID_conversion.keys():
+#     data.loc[data['StdGeographyLevel'] == 'US.CBSA', 'StdGeographyID'] = Esri_to_NECTAID_conversion[msaid]
+#     msaid = Esri_to_NECTAID_conversion[msaid]
 
-
-#The folling section was added because ESRI unemployment data is updated once a year.
-#So, to keep it updated, we will need to get a "multiplier" that will adjust all the unemployment value according
-#to the region.
+######## BEGINNING OF ADJUSTMENT SECTION ###########
+#The folling section was added to update 3 data points that ESRI updates once a year.
+#These are Unemployment Rate, Median Home Values, and Average Home Values
+#To update these, I have created the following script. Here are some common issues
+#We need zipcodes to query the ZIP_Adjustment_Multiplier table. This table contains values and adjustments for
+#all 3 data points. If zipcode is not found in ZIP_Adjustment_Multiplier, we will run the 2nd script. This is one
+#is much more complex.
 
 with open("./un_pw.json", "r") as file:
     aws_string = json.load(file)['aws_mysql']
 
-bls_unemployment_multiplier = pd.read_sql_query("""
-                                                select Geo_Type, Unemployment_multiplier
-                                                from ESRI_Unemployment_Multiplier
-                                                where (Geo_ID = {} and Geo_Type =  'US.CBSA' )
-                                                or (Geo_ID =  {} and Geo_Type =  'US.States' )
-                                                or (Geo_ID =  '99999')
-                                                """.format(msaid,stateid), create_engine(aws_string))
+data_adjustment = pd.read_sql_query("""
+                                        select *
+                                        from ZIP_Adjustment_Multiplier
+                                        where ZIP = '{}' and COUNTYID = '{}'
+                                        """.format(zipcode,countyid), create_engine(aws_string))
 
-usa_multiplier = bls_unemployment_multiplier[bls_unemployment_multiplier['Geo_Type'] == 'US.WholeUSA'].iloc[0]['Unemployment_multiplier']
-state_multiplier = bls_unemployment_multiplier[bls_unemployment_multiplier['Geo_Type'] == 'US.States'].iloc[0]['Unemployment_multiplier']
+if not data_adjustment.empty:
+# if data_adjustment.empty:
+    usa_unemployment = data_adjustment['National_UnemploymentRate'].iloc[0]
+    msa_unemployment = data_adjustment['Msa_UnemploymentRate'].iloc[0]
+    county_unemployment = data_adjustment['County_UnemploymentRate'].iloc[0]
+    msa_unemployment_multiplier = data_adjustment['Metro_unemployment_multiplier'].iloc[0]
+    state_unemployment_multiplier = data_adjustment['State_unemployment_multiplier'].iloc[0]
+    zip_pricechange = data_adjustment['ZIP_PriceChange'].iloc[0]
+    msa_pricechange = data_adjustment['MSA_PriceChange'].iloc[0]
+    county_pricechange = data_adjustment['COUNTY_PriceChange'].iloc[0]
+    usa_pricechange = data_adjustment['USA_PriceChange'].iloc[0]
 
-if 'US.CBSA' in bls_unemployment_multiplier['Geo_Type'].values:
-   unemployment_multiplier = bls_unemployment_multiplier[bls_unemployment_multiplier['Geo_Type'] == 'US.CBSA'].iloc[0]['Unemployment_multiplier']
-elif 'US.States' in bls_unemployment_multiplier['Geo_Type'].values:
-    unemployment_multiplier = bls_unemployment_multiplier[bls_unemployment_multiplier['Geo_Type'] == 'US.States'].iloc[0]['Unemployment_multiplier']
+    if not msa_pricechange:
+        msa_pricechange = 0
+
+    for i, row in data.iterrows():
+        if row['StdGeographyLevel'] == 'US.WholeUSA':
+            data.at[i, 'UNEMPRT_CY'] = usa_unemployment
+            data.at[i, 'MEDVAL_CY'] = (1 + usa_pricechange) * row['MEDVAL_CY']
+            data.at[i, 'AVGVAL_CY'] = (1 + usa_pricechange) * row['AVGVAL_CY']
+
+        elif row['StdGeographyLevel'] == 'US.CBSA':
+            if msa_unemployment:
+                data.at[i, 'UNEMPRT_CY'] = msa_unemployment
+            elif msa_unemployment_multiplier:
+                data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * msa_unemployment_multiplier) * 10 ** 1) / 10 ** 1
+
+            data.at[i, 'MEDVAL_CY'] = (1 + msa_pricechange) * row['MEDVAL_CY']
+            data.at[i, 'AVGVAL_CY'] = (1 + msa_pricechange) * row['AVGVAL_CY']
+
+        elif row['StdGeographyLevel'] == 'US.Counties':
+            if msa_unemployment:
+                data.at[i, 'UNEMPRT_CY'] = county_unemployment
+            elif msa_unemployment_multiplier:
+                data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * msa_unemployment_multiplier) * 10 ** 1) / 10 ** 1
+
+            data.at[i, 'MEDVAL_CY'] = (1 + county_pricechange) * row['MEDVAL_CY']
+            data.at[i, 'AVGVAL_CY'] = (1 + county_pricechange) * row['AVGVAL_CY']
+        else:
+            if msa_unemployment_multiplier:
+                data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * msa_unemployment_multiplier) * 10 ** 1) / 10 ** 1
+            elif state_unemployment_multiplier:
+                data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * state_unemployment_multiplier) * 10 ** 1) / 10 ** 1
+
+            data.at[i, 'MEDVAL_CY'] = (1 + zip_pricechange) * row['MEDVAL_CY']
+            data.at[i, 'AVGVAL_CY'] = (1 + zip_pricechange) * row['AVGVAL_CY']
 else:
-    unemployment_multiplier = usa_multiplier
+    msa_unemployment = False
+    bls_unemployment_multiplier = pd.read_sql_query("""
+                                                    select Geo_Type, UnemploymentRate_BLS, Unemployment_multiplier
+                                                    from ESRI_Unemployment_Multiplier
+                                                    where (Geo_ID = '{}' and Geo_Type =  'US.CBSA' )
+                                                    or (Geo_ID =  '{}' and Geo_Type =  'US.States' )
+                                                    or (Geo_ID =  '99999')
+                                                    """.format(msaid,stateid), create_engine(aws_string))
 
-#Truncate unemployment rate to 1 decimal point without rounding
-for i,row in data.iterrows():
-    if row['StdGeographyLevel'] == 'US.WholeUSA':
-        data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * usa_multiplier) * 10 ** 1) / 10 ** 1
+    usa_unemployment_multiplier = bls_unemployment_multiplier[bls_unemployment_multiplier['Geo_Type'] == 'US.WholeUSA'].iloc[0]['Unemployment_multiplier']
+
+    if 'US.CBSA' in bls_unemployment_multiplier['Geo_Type'].values:
+       unemployment_multiplier = bls_unemployment_multiplier[bls_unemployment_multiplier['Geo_Type'] == 'US.CBSA'].iloc[0]['Unemployment_multiplier']
+       msa_unemployment = bls_unemployment_multiplier[bls_unemployment_multiplier['Geo_Type'] == 'US.CBSA'].iloc[0]['UnemploymentRate_BLS']
+    elif 'US.States' in bls_unemployment_multiplier['Geo_Type'].values:
+        unemployment_multiplier = bls_unemployment_multiplier[bls_unemployment_multiplier['Geo_Type'] == 'US.States'].iloc[0]['Unemployment_multiplier']
     else:
-        data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * unemployment_multiplier) * 10 ** 1) / 10 ** 1
+        unemployment_multiplier = usa_unemployment_multiplier
+
+    county_unemployment = pd.read_sql_query("""select * from  BLS_Unemployment Where Geo_Type = 'County' and Geo_ID =  '{}' """.format(countyid), create_engine(aws_string))
+    usa_unemployment = bls_unemployment_multiplier[bls_unemployment_multiplier['Geo_Type'] == 'US.WholeUSA'].iloc[0]['UnemploymentRate_BLS']
+
+    if not msaid:
+        msa_unemployment = 'N/A'
+
+    msa_pricechange = pd.read_sql_query("""select * from  MSA_HomeValue_Multiplier where MSAID in ('99999','{}')""".format(msaid), create_engine(aws_string))
+    usa_pricechange = msa_pricechange[msa_pricechange['MSAID'] == '99999'].iloc[0]['MSA_PriceChange']
+    msa_pricechange = msa_pricechange[msa_pricechange['MSAID'] != '99999']
+    county_pricechange = pd.read_sql_query("""select * from  County_HomeValue_Multiplier where COUNTYID in ('{}')""".format(countyid), create_engine(aws_string))
+
+    if not msa_pricechange.empty:
+        msa_pricechange = msa_pricechange['MSA_PriceChange'].iloc[0]
+    else:
+        msa_pricechange = 0
+
+    if not county_pricechange.empty:
+        county_pricechange = county_pricechange['COUNTY_PriceChange'].iloc[0]
+    else:
+        county_pricechange = 0
+
+    #Truncate unemployment rate to 1 decimal point without rounding
+    for i,row in data.iterrows():
+        if row['StdGeographyLevel'] == 'US.WholeUSA':
+            data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * usa_unemployment_multiplier) * 10 ** 1) / 10 ** 1
+            data.at[i, 'MEDVAL_CY'] = (1 + usa_pricechange) * row['MEDVAL_CY']
+            data.at[i, 'AVGVAL_CY'] = (1 + usa_pricechange) * row['AVGVAL_CY']
+
+        elif row['StdGeographyLevel'] == 'US.Counties':
+            if not county_unemployment.empty:
+                data.at[i, 'UNEMPRT_CY'] = county_unemployment.iloc[0]['UnemploymentRate']
+            else:
+                data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * unemployment_multiplier) * 10 ** 1) / 10 ** 1
+
+            data.at[i, 'MEDVAL_CY'] = (1 + county_pricechange) * row['MEDVAL_CY']
+            data.at[i, 'AVGVAL_CY'] = (1 + county_pricechange) * row['AVGVAL_CY']
+
+        else:
+            data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * unemployment_multiplier) * 10 ** 1) / 10 ** 1
+            if msa_pricechange != 0:
+                data.at[i, 'MEDVAL_CY'] = (1 + msa_pricechange) * row['MEDVAL_CY']
+                data.at[i, 'AVGVAL_CY'] = (1 + msa_pricechange) * row['AVGVAL_CY']
+            elif county_pricechange != 0:
+                data.at[i, 'MEDVAL_CY'] = (1 + county_pricechange) * row['MEDVAL_CY']
+                data.at[i, 'AVGVAL_CY'] = (1 + county_pricechange) * row['AVGVAL_CY']
 
 
-
-#Drop useless columns
 comparison_df = data
-
 comparison_df['StdGeographyName'] = comparison_df['StdGeographyName'].str.replace('Metropolitan Statistical Area','MSA')
 
 
@@ -127,10 +226,6 @@ for i, row in comparison_df.iterrows():
         comparison_df.at[i, 'CRMCYROBB'] = comparison_df.at[i, 'CRMCYROBB'] * crime_index_multiplier['CRMCYROBB'] * .01
         comparison_df.at[i, 'CRMCYRAPE'] = comparison_df.at[i, 'CRMCYRAPE'] * crime_index_multiplier['CRMCYRAPE'] * .01
         comparison_df.at[i, 'CRMCYASST'] = comparison_df.at[i, 'CRMCYASST'] * crime_index_multiplier['CRMCYASST'] * .01
-
-
-
-
 
 
 # Get non comparison data
