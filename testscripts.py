@@ -4,7 +4,7 @@ from arcgis.geoenrichment import enrich
 import numpy as np
 import pandas as pd
 import requests
-import json
+import json 
 from arcgisvariables import variables
 from realtymolesampledata import rental_data
 import sys
@@ -18,10 +18,10 @@ from sqlalchemy import create_engine
 # #######################################################
 
 
-address = '777 Hollywood Blvd, Dayton, OH 45414'
+address = '16 S Main St, Rutland, VT 05701'
 radius = 1
 
-gis = GIS('https://www.arcgis.com', 'arcgis_python', 'P@ssword123')
+gis = GIS('https://www.arcgis.com', 'jayleeong0913', 'jack1ass')
 
 with open("./un_pw.json", "r") as file:
     gmap_api = json.load(file)['googleapi']
@@ -43,38 +43,29 @@ zipcode = google_address.current_result.postal
 # Get comparison data
 comparison_variables = variables['comparison_variables']
 
+# test_variables = {
+#         'UNEMPRT_CY': 'Unemployment Rate',
+#     }
 
 data = enrich(study_areas=[{"geometry": {"x":x_lon,"y":y_lat}, "areaType":"RingBuffer","bufferUnits":"Miles","bufferRadii":[radius]}],
+              # analysis_variables=list(test_variables.keys()),
               analysis_variables=list(comparison_variables.keys()),
               comparison_levels=['US.WholeUSA','US.CBSA','US.Counties','US.Tracts'],
               return_geometry=False)
 data = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
                           'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData', 'sourceCountry'])
 
-
-
-
-# ESRI provides MSA IDs (US.CBSA) that can sometimes be different from the official US MSA IDs.
-# The following converts ESRI IDs
-
-# Esri_to_NECTAID_conversion = {
-# '12620':'70750','12700':'70900','12740':'71050','13540':'71350','13620':'71500','14460':'71650','14860':'71950','15540':'72400','18180':'72700','19430':'19380','25540':'73450',
-# '28300':'73750','29060':'73900','30100':'74350','30340':'74650','31700':'74950','35300':'75700','35980':'76450','36837':'36860','38340':'76600','38860':'76750','39150':'39140',
-# '39300':'77200','40860':'77650','44140':'78100','45860':'78400','47240':'78500','49060':'11680','49340':'79600'
-# }
-
-if 'US.CBSA' in data['StdGeographyLevel']:
+if 'US.CBSA' in list(data['StdGeographyLevel']):
     msaid = data[data['StdGeographyLevel'] == 'US.CBSA']['StdGeographyID'].iloc[0]
 else:
     msaid = None
 countyid = data[data['StdGeographyLevel'] == 'US.Counties']['StdGeographyID'].iloc[0]
 stateid = countyid[:2]
 
-# if msaid in Esri_to_NECTAID_conversion.keys():
-#     data.loc[data['StdGeographyLevel'] == 'US.CBSA', 'StdGeographyID'] = Esri_to_NECTAID_conversion[msaid]
-#     msaid = Esri_to_NECTAID_conversion[msaid]
+#######################################################
+#   BEGINNING OF ADJUSTMENT SECTION
+#######################################################
 
-######## BEGINNING OF ADJUSTMENT SECTION ###########
 #The folling section was added to update 3 data points that ESRI updates once a year.
 #These are Unemployment Rate, Median Home Values, and Average Home Values
 #To update these, I have created the following script. Here are some common issues
@@ -88,11 +79,14 @@ with open("./un_pw.json", "r") as file:
 data_adjustment = pd.read_sql_query("""
                                         select *
                                         from ZIP_Adjustment_Multiplier
-                                        where ZIP = '{}' and COUNTYID = '{}'
-                                        """.format(zipcode,countyid), create_engine(aws_string))
+                                        where ZIP = '{}' and COUNTYID = '{}' and MSAID = '{}'
+                                        """.format(zipcode,countyid,msaid), create_engine(aws_string))
+
+#   If there is a match on the zipcode, run the following script:
 
 if not data_adjustment.empty:
-# if data_adjustment.empty:
+
+#   Get all of the adjustment values.
     usa_unemployment = data_adjustment['National_UnemploymentRate'].iloc[0]
     msa_unemployment = data_adjustment['Msa_UnemploymentRate'].iloc[0]
     county_unemployment = data_adjustment['County_UnemploymentRate'].iloc[0]
@@ -106,6 +100,8 @@ if not data_adjustment.empty:
     if not msa_pricechange:
         msa_pricechange = 0
 
+#   Make sure each record is updated according the the geography (Zip, Counties, CBSA, USA)
+#   We should always have a value for USA. But CBSA and Counties may not always have a value.
     for i, row in data.iterrows():
         if row['StdGeographyLevel'] == 'US.WholeUSA':
             data.at[i, 'UNEMPRT_CY'] = usa_unemployment
@@ -202,6 +198,13 @@ else:
             elif county_pricechange != 0:
                 data.at[i, 'MEDVAL_CY'] = (1 + county_pricechange) * row['MEDVAL_CY']
                 data.at[i, 'AVGVAL_CY'] = (1 + county_pricechange) * row['AVGVAL_CY']
+
+
+
+#######################################################
+#   END OF ADJUSTMENT SECTION
+#######################################################
+
 
 
 comparison_df = data
