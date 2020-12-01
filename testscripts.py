@@ -21,7 +21,9 @@ from sqlalchemy import create_engine
 address = '16 S Main St, Rutland, VT 05701'
 radius = 1
 
-gis = GIS('https://www.arcgis.com', 'arcgis_python', 'P@ssword123')
+# gis = GIS('https://www.arcgis.com', 'arcgis_python', 'P@ssword123')
+# gis = GIS('https://www.arcgis.com', 'jayleeong0913', 'jack1ass')
+# gis = GIS('https://www.arcgis.com', 'Tammy_Mason_LearnArcGIS', 'tooToo123!@#')
 
 with open("./un_pw.json", "r") as file:
     gmap_api = json.load(file)['googleapi']
@@ -43,13 +45,13 @@ zipcode = google_address.current_result.postal
 # Get comparison data
 comparison_variables = variables['comparison_variables']
 
-# test_variables = {
-#         'UNEMPRT_CY': 'Unemployment Rate',
-#     }
+test_variables = {
+        'UNEMPRT_CY': 'Unemployment Rate',
+    }
 
 data = enrich(study_areas=[{"geometry": {"x":x_lon,"y":y_lat}, "areaType":"RingBuffer","bufferUnits":"Miles","bufferRadii":[radius]}],
-              # analysis_variables=list(test_variables.keys()),
-              analysis_variables=list(comparison_variables.keys()),
+              analysis_variables=list(test_variables.keys()),
+              # analysis_variables=list(comparison_variables.keys()),
               comparison_levels=['US.WholeUSA','US.CBSA','US.Counties','US.Tracts'],
               return_geometry=False)
 data = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
@@ -59,6 +61,7 @@ if 'US.CBSA' in list(data['StdGeographyLevel']):
     msaid = data[data['StdGeographyLevel'] == 'US.CBSA']['StdGeographyID'].iloc[0]
 else:
     msaid = None
+
 countyid = data[data['StdGeographyLevel'] == 'US.Counties']['StdGeographyID'].iloc[0]
 stateid = countyid[:2]
 
@@ -76,9 +79,8 @@ stateid = countyid[:2]
 with open("./un_pw.json", "r") as file:
     aws_string = json.load(file)['aws_mysql']
 
-data_adjustment = pd.read_sql_query("""
-                                        select *
-                                        from ZIP_Adjustment_Multiplier
+data_adjustment = pd.read_sql_query(""" select *
+                                        from ZIP_MacoData_Update
                                         where ZIP = '{}' and COUNTYID = '{}' and MSAID = '{}'
                                         """.format(zipcode,countyid,msaid), create_engine(aws_string))
 
