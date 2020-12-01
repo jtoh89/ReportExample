@@ -80,7 +80,7 @@ with open("./un_pw.json", "r") as file:
     aws_string = json.load(file)['aws_mysql']
 
 data_adjustment = pd.read_sql_query(""" select *
-                                        from ZIP_MacoData_Update
+                                        from ZIP_MacroData_Update
                                         where ZIP = '{}' and COUNTYID = '{}' and MSAID = '{}'
                                         """.format(zipcode,countyid,msaid), create_engine(aws_string))
 
