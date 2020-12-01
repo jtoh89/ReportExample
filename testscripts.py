@@ -107,8 +107,8 @@ if not data_adjustment.empty:
     for i, row in data.iterrows():
         if row['StdGeographyLevel'] == 'US.WholeUSA':
             data.at[i, 'UNEMPRT_CY'] = usa_unemployment
-            data.at[i, 'MEDVAL_CY'] = (1 + usa_pricechange) * row['MEDVAL_CY']
-            data.at[i, 'AVGVAL_CY'] = (1 + usa_pricechange) * row['AVGVAL_CY']
+            data.at[i, 'MEDVAL_CY'] = usa_pricechange * row['MEDVAL_CY']
+            data.at[i, 'AVGVAL_CY'] = usa_pricechange * row['AVGVAL_CY']
 
         elif row['StdGeographyLevel'] == 'US.CBSA':
             if msa_unemployment:
@@ -116,8 +116,8 @@ if not data_adjustment.empty:
             elif msa_unemployment_multiplier:
                 data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * msa_unemployment_multiplier) * 10 ** 1) / 10 ** 1
 
-            data.at[i, 'MEDVAL_CY'] = (1 + msa_pricechange) * row['MEDVAL_CY']
-            data.at[i, 'AVGVAL_CY'] = (1 + msa_pricechange) * row['AVGVAL_CY']
+            data.at[i, 'MEDVAL_CY'] = msa_pricechange * row['MEDVAL_CY']
+            data.at[i, 'AVGVAL_CY'] = msa_pricechange * row['AVGVAL_CY']
 
         elif row['StdGeographyLevel'] == 'US.Counties':
             if msa_unemployment:
@@ -125,16 +125,16 @@ if not data_adjustment.empty:
             elif msa_unemployment_multiplier:
                 data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * msa_unemployment_multiplier) * 10 ** 1) / 10 ** 1
 
-            data.at[i, 'MEDVAL_CY'] = (1 + county_pricechange) * row['MEDVAL_CY']
-            data.at[i, 'AVGVAL_CY'] = (1 + county_pricechange) * row['AVGVAL_CY']
+            data.at[i, 'MEDVAL_CY'] = county_pricechange * row['MEDVAL_CY']
+            data.at[i, 'AVGVAL_CY'] = county_pricechange * row['AVGVAL_CY']
         else:
             if msa_unemployment_multiplier:
                 data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * msa_unemployment_multiplier) * 10 ** 1) / 10 ** 1
             elif state_unemployment_multiplier:
                 data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * state_unemployment_multiplier) * 10 ** 1) / 10 ** 1
 
-            data.at[i, 'MEDVAL_CY'] = (1 + zip_pricechange) * row['MEDVAL_CY']
-            data.at[i, 'AVGVAL_CY'] = (1 + zip_pricechange) * row['AVGVAL_CY']
+            data.at[i, 'MEDVAL_CY'] = zip_pricechange * row['MEDVAL_CY']
+            data.at[i, 'AVGVAL_CY'] = zip_pricechange * row['AVGVAL_CY']
 else:
     msa_unemployment = False
     bls_unemployment_multiplier = pd.read_sql_query("""
