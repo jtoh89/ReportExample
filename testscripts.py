@@ -60,7 +60,7 @@ data = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType
 if 'US.CBSA' in list(data['StdGeographyLevel']):
     msaid = data[data['StdGeographyLevel'] == 'US.CBSA']['StdGeographyID'].iloc[0]
 else:
-    msaid = None
+    msaid = ''
 
 countyid = data[data['StdGeographyLevel'] == 'US.Counties']['StdGeographyID'].iloc[0]
 stateid = countyid[:2]
