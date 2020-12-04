@@ -50,16 +50,16 @@ zipcode = google_address.current_result.postal
 # Get comparison data
 comparison_variables = variables['comparison_variables']
 
-# data = enrich(study_areas=[{"geometry": {"x":x_lon,"y":y_lat}, "areaType":"RingBuffer","bufferUnits":"Miles","bufferRadii":[radius]}],
-#               analysis_variables=list(comparison_variables.keys()),
-#               comparison_levels=['US.WholeUSA','US.CBSA','US.Counties','US.Tracts'],
-#               return_geometry=False)
-# data = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
-#                           'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData', 'sourceCountry'])
-# data.to_excel('testdata/TESTDATA_{}.xlsx'.format(address))
+data = enrich(study_areas=[{"geometry": {"x":x_lon,"y":y_lat}, "areaType":"RingBuffer","bufferUnits":"Miles","bufferRadii":[radius]}],
+              analysis_variables=list(comparison_variables.keys()),
+              comparison_levels=['US.WholeUSA','US.CBSA','US.Counties','US.Tracts'],
+              return_geometry=False)
+data = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
+                          'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData', 'sourceCountry'])
+data.to_excel('testdata/TESTDATA_{}.xlsx'.format(address))
 
 
-data = pd.read_excel('testdata/TESTDATA_100 Corrother St, Whitman, NE 69366.xlsx',converters={'StdGeographyID':str})
+# data = pd.read_excel('testdata/TESTDATA_802 E Rose Ave, la habra, ca 90631.xlsx',converters={'StdGeographyID':str})
 
 if 'US.CBSA' in list(data['StdGeographyLevel']):
     msaid = data[data['StdGeographyLevel'] == 'US.CBSA']['StdGeographyID'].iloc[0]
@@ -68,7 +68,6 @@ else:
 
 countyid = data[data['StdGeographyLevel'] == 'US.Counties']['StdGeographyID'].iloc[0]
 stateid = countyid[:2]
-
 #######################################################
 #   BEGINNING OF ADJUSTMENT SECTION
 #######################################################
@@ -175,24 +174,29 @@ else:
         unemployment_adjustment = usa_unemployment / data[data['StdGeographyLevel'] == 'US.WholeUSA'].iloc[0]['UNEMPRT_CY']
 
 
-    zip_pricechange = pd.read_sql_query("""select * from HomeValue_PriceChange_ZIP where ZIP = '{}'""".format(zipcode), create_engine(aws_string))
-    county_pricechange = pd.read_sql_query("""select * from HomeValue_PriceChange_County where COUNTYID = '{}'""".format(countyid), create_engine(aws_string))
-    msa_pricechange = pd.read_sql_query("""select * from  HomeValue_PriceChange_MSA where MSAID in ('99999','{}')""".format(msaid), create_engine(aws_string))
-    usa_pricechange = msa_pricechange[msa_pricechange['MSAID'] == '99999'].iloc[0]['MSA_PriceChange']
-    msa_pricechange = msa_pricechange[msa_pricechange['MSAID'] == msaid]
+    pricechange = pd.read_sql_query("""select * from HomeValue_PriceChange where 
+                                            (Geo_Type = 'National') or
+                                            (Geo_Type = 'ZIP' and Geo_ID = '{0}') or 
+                                            (Geo_Type = 'MSA' and Geo_ID = '{1}') or 
+                                            (Geo_Type = 'Counties' and Geo_ID = '{2}')""".format(zipcode,msaid,countyid), create_engine(aws_string))
+
+    usa_pricechange = pricechange[pricechange['Geo_ID'] == '99999'].iloc[0]['PriceChange']
+    zip_pricechange = pricechange[pricechange['Geo_ID'] == '{}'.format(zipcode)]
+    county_pricechange = pricechange[pricechange['Geo_ID'] == '{}'.format(countyid)]
+    msa_pricechange = pricechange[pricechange['Geo_ID'] == msaid]
 
     if not zip_pricechange.empty:
-        zip_pricechange = msa_pricechange['MSA_PriceChange'].iloc[0]
+        zip_pricechange = zip_pricechange.iloc[0]['PriceChange']
     else:
         zip_pricechange = None
 
     if not msa_pricechange.empty:
-        msa_pricechange = msa_pricechange['MSA_PriceChange'].iloc[0]
+        msa_pricechange = msa_pricechange.iloc[0]['PriceChange']
     else:
         msa_pricechange = None
 
     if not county_pricechange.empty:
-        county_pricechange = county_pricechange['COUNTY_PriceChange'].iloc[0]
+        county_pricechange = county_pricechange.iloc[0]['PriceChange']
     else:
         county_pricechange = None
 
