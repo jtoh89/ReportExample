@@ -47,19 +47,19 @@ zipcode = google_address.current_result.postal
 # Getting data from Arcgis REST API.
 #######################################################
 
-# Get comparison data
-comparison_variables = variables['comparison_variables']
+# # Get comparison data
+# comparison_variables = variables['comparison_variables']
+#
+# data = enrich(study_areas=[{"geometry": {"x":x_lon,"y":y_lat}, "areaType":"RingBuffer","bufferUnits":"Miles","bufferRadii":[radius]}],
+#               analysis_variables=list(comparison_variables.keys()),
+#               comparison_levels=['US.WholeUSA','US.CBSA','US.Counties','US.Tracts'],
+#               return_geometry=False)
+# data = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
+#                           'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData', 'sourceCountry'])
+# data.to_excel('testdata/TESTDATA_{}.xlsx'.format(address))
 
-data = enrich(study_areas=[{"geometry": {"x":x_lon,"y":y_lat}, "areaType":"RingBuffer","bufferUnits":"Miles","bufferRadii":[radius]}],
-              analysis_variables=list(comparison_variables.keys()),
-              comparison_levels=['US.WholeUSA','US.CBSA','US.Counties','US.Tracts'],
-              return_geometry=False)
-data = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
-                          'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData', 'sourceCountry'])
-data.to_excel('testdata/TESTDATA_{}.xlsx'.format(address))
 
-
-# data = pd.read_excel('testdata/TESTDATA_802 E Rose Ave, la habra, ca 90631.xlsx',converters={'StdGeographyID':str})
+data = pd.read_excel('testdata/TESTDATA_802 E Rose Ave, la habra, ca 90631.xlsx',converters={'StdGeographyID':str})
 
 if 'US.CBSA' in list(data['StdGeographyLevel']):
     msaid = data[data['StdGeographyLevel'] == 'US.CBSA']['StdGeographyID'].iloc[0]
@@ -68,6 +68,7 @@ else:
 
 countyid = data[data['StdGeographyLevel'] == 'US.Counties']['StdGeographyID'].iloc[0]
 stateid = countyid[:2]
+
 #######################################################
 #   BEGINNING OF ADJUSTMENT SECTION
 #######################################################
@@ -87,160 +88,99 @@ data_adjustment = pd.read_sql_query(""" select *
                                         where ZIP = '{}' and COUNTYID = '{}' and MSAID = '{}'
                                         """.format(zipcode,countyid,msaid), create_engine(aws_string))
 
-#   If there is a match on the zipcode, run the following script:
 
-if not data_adjustment.empty:
 #   Get all of the adjustment values.
+if not data_adjustment.empty:
+#   If there is a match on the zipcode, run the following script:
     usa_unemployment = data_adjustment['USA_UnemploymentRate'].iloc[0]
     msa_unemployment = data_adjustment['MSA_UnemploymentRate'].iloc[0]
     county_unemployment = data_adjustment['COUNTY_UnemploymentRate'].iloc[0]
-    msa_unemployment_adjustment = data_adjustment['MSA_unemployment_adjustment'].iloc[0]
-    state_unemployment_adjustment = data_adjustment['STATE_unemployment_adjustment'].iloc[0]
+    msa_unemployment_adjustment = data_adjustment['MSA_Unemployment_Adjustment'].iloc[0]
+    county_unemployment_adjustment = data_adjustment['COUNTY_Unemployment_Adjustment'].iloc[0]
+    state_unemployment_adjustment = data_adjustment['STATE_Unemployment_Adjustment'].iloc[0]
     zip_pricechange = data_adjustment['ZIP_PriceChange'].iloc[0]
     msa_pricechange = data_adjustment['MSA_PriceChange'].iloc[0]
     county_pricechange = data_adjustment['COUNTY_PriceChange'].iloc[0]
     usa_pricechange = data_adjustment['USA_PriceChange'].iloc[0]
-
-
-#   Make sure each record is updated according to the geography (Zip, Counties, CBSA, USA)
-#   We should always have a value for USA. But CBSA and Counties may not always have a value.
-    for i, row in data.iterrows():
-        if row['StdGeographyLevel'] == 'US.WholeUSA':
-            data.at[i, 'UNEMPRT_CY'] = usa_unemployment
-            data.at[i, 'MEDVAL_CY'] = usa_pricechange * row['MEDVAL_CY']
-            data.at[i, 'AVGVAL_CY'] = usa_pricechange * row['AVGVAL_CY']
-
-        elif row['StdGeographyLevel'] == 'US.CBSA':
-            if msa_unemployment:
-                data.at[i, 'UNEMPRT_CY'] = msa_unemployment
-            else:
-                data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * state_unemployment_adjustment) * 10 ** 1) / 10 ** 1
-
-            if msa_pricechange:
-                data.at[i, 'MEDVAL_CY'] = msa_pricechange * row['MEDVAL_CY']
-                data.at[i, 'AVGVAL_CY'] = msa_pricechange * row['AVGVAL_CY']
-
-        elif row['StdGeographyLevel'] == 'US.Counties':
-            if county_unemployment:
-                data.at[i, 'UNEMPRT_CY'] = county_unemployment
-            else:
-                data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * state_unemployment_adjustment) * 10 ** 1) / 10 ** 1
-
-            if county_pricechange:
-                data.at[i, 'MEDVAL_CY'] = county_pricechange * row['MEDVAL_CY']
-                data.at[i, 'AVGVAL_CY'] = county_pricechange * row['AVGVAL_CY']
-        else:
-            if msa_unemployment_adjustment:
-                data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * msa_unemployment_adjustment) * 10 ** 1) / 10 ** 1
-            else:
-                data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * state_unemployment_adjustment) * 10 ** 1) / 10 ** 1
-
-            if zip_pricechange:
-                data.at[i, 'MEDVAL_CY'] = zip_pricechange * row['MEDVAL_CY']
-                data.at[i, 'AVGVAL_CY'] = zip_pricechange * row['AVGVAL_CY']
-            elif msa_pricechange:
-                data.at[i, 'MEDVAL_CY'] = msa_pricechange * row['MEDVAL_CY']
-                data.at[i, 'AVGVAL_CY'] = msa_pricechange * row['AVGVAL_CY']
-            elif county_pricechange:
-                data.at[i, 'MEDVAL_CY'] = county_pricechange * row['MEDVAL_CY']
-                data.at[i, 'AVGVAL_CY'] = county_pricechange * row['AVGVAL_CY']
-
 else:
-    unemployment_all = pd.read_sql_query("""select UnemploymentRate, Geo_ID, Geo_Name, Geo_Type from BLS_Unemployment where 
-                                            (Geo_Type = 'National') or
-                                            (Geo_Type = 'States' and Geo_ID = '{0}') or 
-                                            (Geo_Type in ('Metro','Micro') and Geo_ID = '{1}') or 
-                                            (Geo_Type in ('Counties') and Geo_ID = '{2}')
-                                            """.format(stateid,msaid,countyid), create_engine(aws_string))
+#   If there is no match on the zipcode, run the following script. This queries the same table, but gets unique values based on
+#   each individual unique id:
+    zip_adjustment = pd.read_sql_query("""select DISTINCT ZIP, ZIP_PriceChange
+                                          from ZIP_MacroData_Update where ZIP = '{}' 
+                                            """.format(zipcode), create_engine(aws_string))
 
-    usa_unemployment = unemployment_all[unemployment_all['Geo_Type'] == 'National'].iloc[0]['UnemploymentRate']
+    msa_adjustment = pd.read_sql_query("""select DISTINCT MSAID, MSA_PriceChange, MSA_UnemploymentRate, MSA_Unemployment_Adjustment
+                                          from ZIP_MacroData_Update where MSAID = '{}' 
+                                            """.format(msaid), create_engine(aws_string))
+
+    county_adjustment = pd.read_sql_query("""select DISTINCT COUNTYID, COUNTY_PriceChange, COUNTY_UnemploymentRate, COUNTY_Unemployment_Adjustment
+                                            from ZIP_MacroData_Update where COUNTYID = '{}' 
+                                            """.format(countyid), create_engine(aws_string))
+
+    state_adjustment = pd.read_sql_query("""select DISTINCT STATEID, STATE_Unemployment_Adjustment , USA_PriceChange, USA_UnemploymentRate
+                                            from ZIP_MacroData_Update where STATEID = '{}'
+                                            """.format(stateid), create_engine(aws_string))
+
+    usa_unemployment = state_adjustment['USA_UnemploymentRate'].iloc[0]
+    msa_unemployment = msa_adjustment['MSA_UnemploymentRate'].iloc[0]
+    county_unemployment = county_adjustment['COUNTY_UnemploymentRate'].iloc[0]
+    msa_unemployment_adjustment = msa_adjustment['MSA_Unemployment_Adjustment'].iloc[0]
+    county_unemployment_adjustment = county_adjustment['COUNTY_Unemployment_Adjustment'].iloc[0]
+    state_unemployment_adjustment = state_adjustment['STATE_Unemployment_Adjustment'].iloc[0]
+    zip_pricechange = zip_adjustment['ZIP_PriceChange'].iloc[0]
+    msa_pricechange = msa_adjustment['MSA_PriceChange'].iloc[0]
+    county_pricechange = county_adjustment['COUNTY_PriceChange'].iloc[0]
+    usa_pricechange = state_adjustment['USA_PriceChange'].iloc[0]
 
 
-    if 'Metro' in list(unemployment_all['Geo_Type']) or 'Micro' in unemployment_all['Geo_Type']:
-        msa_unemployment = float(unemployment_all[unemployment_all['Geo_Type'].isin(['Metro','Micro'])].iloc[0]['UnemploymentRate'])
-    else:
-        msa_unemployment = None
+#   Make sure each record is updated according to the geography (Zip, Tract, Counties, CBSA, USA)
+#   We should always have a value for USA. But CBSA and Counties may not always have a value.
+for i, row in data.iterrows():
+    if row['StdGeographyLevel'] == 'US.WholeUSA':
+        data.at[i, 'UNEMPRT_CY'] = usa_unemployment
+        data.at[i, 'MEDVAL_CY'] = usa_pricechange * row['MEDVAL_CY']
+        data.at[i, 'AVGVAL_CY'] = usa_pricechange * row['AVGVAL_CY']
 
-    if 'Counties' in list(unemployment_all['Geo_Type']):
-        county_unemployment = float(unemployment_all[unemployment_all['Geo_Type'].isin(['Counties'])].iloc[0]['UnemploymentRate'])
-    else:
-        county_unemployment = None
-
-    if msa_unemployment and 'US.CBSA' in list(data['StdGeographyLevel']):
-        unemployment_adjustment = msa_unemployment / data[data['StdGeographyLevel'] == 'US.CBSA'].iloc[0]['UNEMPRT_CY']
-    elif county_unemployment and 'US.Counties' in list(data['StdGeographyLevel']):
-        unemployment_adjustment = county_unemployment / data[data['StdGeographyLevel'] == 'US.Counties'].iloc[0]['UNEMPRT_CY']
-    else:
-        unemployment_adjustment = usa_unemployment / data[data['StdGeographyLevel'] == 'US.WholeUSA'].iloc[0]['UNEMPRT_CY']
-
-
-    pricechange = pd.read_sql_query("""select * from HomeValue_PriceChange where 
-                                            (Geo_Type = 'National') or
-                                            (Geo_Type = 'ZIP' and Geo_ID = '{0}') or 
-                                            (Geo_Type = 'MSA' and Geo_ID = '{1}') or 
-                                            (Geo_Type = 'Counties' and Geo_ID = '{2}')""".format(zipcode,msaid,countyid), create_engine(aws_string))
-
-    usa_pricechange = pricechange[pricechange['Geo_ID'] == '99999'].iloc[0]['PriceChange']
-    zip_pricechange = pricechange[pricechange['Geo_ID'] == '{}'.format(zipcode)]
-    county_pricechange = pricechange[pricechange['Geo_ID'] == '{}'.format(countyid)]
-    msa_pricechange = pricechange[pricechange['Geo_ID'] == msaid]
-
-    if not zip_pricechange.empty:
-        zip_pricechange = zip_pricechange.iloc[0]['PriceChange']
-    else:
-        zip_pricechange = None
-
-    if not msa_pricechange.empty:
-        msa_pricechange = msa_pricechange.iloc[0]['PriceChange']
-    else:
-        msa_pricechange = None
-
-    if not county_pricechange.empty:
-        county_pricechange = county_pricechange.iloc[0]['PriceChange']
-    else:
-        county_pricechange = None
-
-    #Truncate unemployment rate to 1 decimal point without rounding
-    for i,row in data.iterrows():
-        if row['StdGeographyLevel'] == 'US.WholeUSA':
-            data.at[i, 'UNEMPRT_CY'] = usa_unemployment
-            data.at[i, 'MEDVAL_CY'] = usa_pricechange * row['MEDVAL_CY']
-            data.at[i, 'AVGVAL_CY'] = usa_pricechange * row['AVGVAL_CY']
-
-        elif row['StdGeographyLevel'] == 'US.CBSA':
-            if msa_unemployment:
-                data.at[i, 'UNEMPRT_CY'] = msa_unemployment
-            else:
-                data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * unemployment_adjustment) * 10 ** 1) / 10 ** 1
-
-            if msa_pricechange:
-                data.at[i, 'MEDVAL_CY'] = msa_pricechange * row['MEDVAL_CY']
-                data.at[i, 'AVGVAL_CY'] = msa_pricechange * row['AVGVAL_CY']
-
-        elif row['StdGeographyLevel'] == 'US.Counties':
-            if county_unemployment:
-                data.at[i, 'UNEMPRT_CY'] = county_unemployment
-            else:
-                data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * unemployment_adjustment) * 10 ** 1) / 10 ** 1
-
-            if county_pricechange:
-                data.at[i, 'MEDVAL_CY'] = county_pricechange * row['MEDVAL_CY']
-                data.at[i, 'AVGVAL_CY'] = county_pricechange * row['AVGVAL_CY']
-
+    elif row['StdGeographyLevel'] == 'US.CBSA':
+        if msa_unemployment:
+            data.at[i, 'UNEMPRT_CY'] = msa_unemployment
+        elif county_unemployment_adjustment:
+            data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * county_unemployment_adjustment) * 10 ** 1) / 10 ** 1
         else:
-            data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * unemployment_adjustment) * 10 ** 1) / 10 ** 1
+            data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * state_unemployment_adjustment) * 10 ** 1) / 10 ** 1
 
-            if zip_pricechange:
-                data.at[i, 'MEDVAL_CY'] = zip_pricechange * row['MEDVAL_CY']
-                data.at[i, 'AVGVAL_CY'] = zip_pricechange * row['AVGVAL_CY']
-            elif msa_pricechange:
-                data.at[i, 'MEDVAL_CY'] = msa_pricechange * row['MEDVAL_CY']
-                data.at[i, 'AVGVAL_CY'] = msa_pricechange * row['AVGVAL_CY']
-            elif county_pricechange:
-                data.at[i, 'MEDVAL_CY'] = county_pricechange * row['MEDVAL_CY']
-                data.at[i, 'AVGVAL_CY'] = county_pricechange * row['AVGVAL_CY']
+        if msa_pricechange:
+            data.at[i, 'MEDVAL_CY'] = msa_pricechange * row['MEDVAL_CY']
+            data.at[i, 'AVGVAL_CY'] = msa_pricechange * row['AVGVAL_CY']
 
+    elif row['StdGeographyLevel'] == 'US.Counties':
+        if county_unemployment:
+            data.at[i, 'UNEMPRT_CY'] = county_unemployment
+        elif county_unemployment_adjustment:
+            data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * county_unemployment_adjustment) * 10 ** 1) / 10 ** 1
+        else:
+            data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * state_unemployment_adjustment) * 10 ** 1) / 10 ** 1
 
+        if county_pricechange:
+            data.at[i, 'MEDVAL_CY'] = county_pricechange * row['MEDVAL_CY']
+            data.at[i, 'AVGVAL_CY'] = county_pricechange * row['AVGVAL_CY']
+    else:
+        if msa_unemployment_adjustment:
+            data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * msa_unemployment_adjustment) * 10 ** 1) / 10 ** 1
+        elif county_unemployment_adjustment:
+            data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * county_unemployment_adjustment) * 10 ** 1) / 10 ** 1
+        else:
+            data.at[i, 'UNEMPRT_CY'] = math.floor((row['UNEMPRT_CY'] * state_unemployment_adjustment) * 10 ** 1) / 10 ** 1
+
+        if zip_pricechange:
+            data.at[i, 'MEDVAL_CY'] = zip_pricechange * row['MEDVAL_CY']
+            data.at[i, 'AVGVAL_CY'] = zip_pricechange * row['AVGVAL_CY']
+        elif msa_pricechange:
+            data.at[i, 'MEDVAL_CY'] = msa_pricechange * row['MEDVAL_CY']
+            data.at[i, 'AVGVAL_CY'] = msa_pricechange * row['AVGVAL_CY']
+        elif county_pricechange:
+            data.at[i, 'MEDVAL_CY'] = county_pricechange * row['MEDVAL_CY']
+            data.at[i, 'AVGVAL_CY'] = county_pricechange * row['AVGVAL_CY']
 
 #######################################################
 #   END OF ADJUSTMENT SECTION
