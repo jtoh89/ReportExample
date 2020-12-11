@@ -25,10 +25,10 @@ from sqlalchemy import create_engine
 address = '100 Corrother St, Whitman, NE 69366'
 radius = 1
 
-# gis = GIS('https://www.arcgis.com', 'arcgis_python', 'P@ssword123')
-# gis = GIS('https://www.arcgis.com', 'jayleeong0913', 'jack1ass')
-# gis = GIS('https://www.arcgis.com', 'Tammy_Mason_LearnArcGIS', 'tooToo123!@#')
-gis = GIS('https://www.arcgis.com', 'OscarJuliJuli9932', 'hdf23df!erf')
+gis = GIS('https://www.arcgis.com', 'arcgis_python', 'P@ssword123')
+
+
+
 
 with open("./un_pw.json", "r") as file:
     gmap_api = json.load(file)['googleapi']
