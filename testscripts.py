@@ -47,19 +47,19 @@ zipcode = google_address.current_result.postal
 # Getting data from Arcgis REST API.
 #######################################################
 
-# # Get comparison data
-# comparison_variables = variables['comparison_variables']
-#
-# data = enrich(study_areas=[{"geometry": {"x":x_lon,"y":y_lat}, "areaType":"RingBuffer","bufferUnits":"Miles","bufferRadii":[radius]}],
-#               analysis_variables=list(comparison_variables.keys()),
-#               comparison_levels=['US.WholeUSA','US.CBSA','US.Counties','US.Tracts'],
-#               return_geometry=False)
-# data = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
-#                           'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData', 'sourceCountry'])
-# data.to_excel('testdata/TESTDATA_{}.xlsx'.format(address))
+# Get comparison data
+comparison_variables = variables['comparison_variables']
+
+data = enrich(study_areas=[{"geometry": {"x":x_lon,"y":y_lat}, "areaType":"RingBuffer","bufferUnits":"Miles","bufferRadii":[radius]}],
+              analysis_variables=list(comparison_variables.keys()),
+              comparison_levels=['US.WholeUSA','US.CBSA','US.Counties','US.Tracts'],
+              return_geometry=False)
+data = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
+                          'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData', 'sourceCountry'])
+data.to_excel('testdata/TESTDATA_{}.xlsx'.format(address))
 
 
-data = pd.read_excel('testdata/TESTDATA_802 E Rose Ave, la habra, ca 90631.xlsx',converters={'StdGeographyID':str})
+# data = pd.read_excel('testdata/TESTDATA_802 E Rose Ave, la habra, ca 90631.xlsx',converters={'StdGeographyID':str})
 
 if 'US.CBSA' in list(data['StdGeographyLevel']):
     msaid = data[data['StdGeographyLevel'] == 'US.CBSA']['StdGeographyID'].iloc[0]
