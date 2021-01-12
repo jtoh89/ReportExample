@@ -11,6 +11,7 @@ import sys
 import math
 import geocoder as googlegeocoder
 import sys
+import datetime as dt
 from sqlalchemy import create_engine
 
 # #######################################################
@@ -20,9 +21,10 @@ from sqlalchemy import create_engine
 #Test Addresses
 #Zipcode in 2 counties: 303 Cass Ave, Fairview, MT 59221
 #No population: '100 Corrother St, Whitman, NE 69366'
+#scopeout test 1502 S Cleveland Ave, Joplin, MO 64801, USA
 #
 
-address = '100 Corrother St, Whitman, NE 69366'
+address = '100 CORROTHER ST, Whitman, NE 69366, USA'
 radius = 1
 
 gis = GIS('https://www.arcgis.com', 'arcgis_python', 'P@ssword123')
@@ -56,7 +58,7 @@ data = enrich(study_areas=[{"geometry": {"x":x_lon,"y":y_lat}, "areaType":"RingB
               return_geometry=False)
 data = data.drop(columns=['ID', 'apportionmentConfidence', 'OBJECTID', 'areaType', 'bufferUnits', 'bufferUnitsAlias',
                           'bufferRadii', 'aggregationMethod', 'populationToPolygonSizeRating', 'HasData', 'sourceCountry'])
-data.to_excel('testdata/TESTDATA_{}.xlsx'.format(address))
+# data.to_excel('testdata/TESTDATA_{}.xlsx'.format(address))
 
 
 # data = pd.read_excel('testdata/TESTDATA_802 E Rose Ave, la habra, ca 90631.xlsx',converters={'StdGeographyID':str})
@@ -106,15 +108,15 @@ else:
 #   If there is no match on the zipcode, run the following script. This queries the same table, but gets unique values based on
 #   each individual unique id:
     zip_adjustment = pd.read_sql_query("""select DISTINCT ZIP, ZIP_PriceChange
-                                          from ZIP_MacroData_Update where ZIP = '{}' 
+                                          from ZIP_MacroData_Update where ZIP = '{}'
                                             """.format(zipcode), create_engine(aws_string))
 
     msa_adjustment = pd.read_sql_query("""select DISTINCT MSAID, MSA_PriceChange, MSA_UnemploymentRate, MSA_Unemployment_Adjustment
-                                          from ZIP_MacroData_Update where MSAID = '{}' 
+                                          from ZIP_MacroData_Update where MSAID = '{}'
                                             """.format(msaid), create_engine(aws_string))
 
     county_adjustment = pd.read_sql_query("""select DISTINCT COUNTYID, COUNTY_PriceChange, COUNTY_UnemploymentRate, COUNTY_Unemployment_Adjustment
-                                            from ZIP_MacroData_Update where COUNTYID = '{}' 
+                                            from ZIP_MacroData_Update where COUNTYID = '{}'
                                             """.format(countyid), create_engine(aws_string))
 
     state_adjustment = pd.read_sql_query("""select DISTINCT STATEID, STATE_Unemployment_Adjustment , USA_PriceChange, USA_UnemploymentRate
@@ -273,11 +275,11 @@ with pd.ExcelWriter('testdata/arcgisoutput.xlsx') as writer:
 
 
 
-######################################################
-# Getting rental data from RealtyMole. NOTE: Below is how I made requests to the API. I commented out this section and am
-# just using sample data for this example. You can see I stored the response data into "realtymoledata50.json". And I pasted
-# the data into "realtymolesampledata.txt"
-######################################################
+####################################################
+#Getting rental data from RealtyMole. NOTE: Below is how I made requests to the API. I commented out this section and am
+#just using sample data for this example. You can see I stored the response data into "realtymoledata50.json". And I pasted
+#the data into "realtymolesampledata.txt"
+####################################################
 
 # with open("./un_pw.json", "r") as file:
 #     realtymole = json.load(file)['realtymole_gmail']
@@ -312,7 +314,7 @@ writer = pd.ExcelWriter('testdata/rentalsummary.xlsx')
 bedroom_rent = pd.DataFrame(columns=['bedrooms','25thPercentile','75thPercentile','averagerent','medianrent','samplesize'])
 
 # calculate values for rental summary
-for i in [0,1,2,3,4,5,6]:
+for i in [0,1,2,3,4]:
     bedroom_data = df[df['bedrooms'] == i]
 
     if bedroom_data.empty:
@@ -346,9 +348,7 @@ rent_range = pd.DataFrame({
                         'rent_2500_2999':0,
                         'rent_3000_3499':0,
                         'rent_3500_3999':0,
-                        'rent_4000_4499':0,
-                        'rent_4500_4999':0,
-                        'rent_5000_more':0},
+                        'rent_4000_more':0,},
                         index=[0])
 
 
@@ -370,12 +370,8 @@ for price in df['price']:
         rent_range['rent_3000_3499'] += 1
     elif price < 4000:
         rent_range['rent_3500_3999'] += 1
-    elif price < 4500:
-        rent_range['rent_4000_4499'] += 1
-    elif price < 5000:
-        rent_range['rent_4500_4999'] += 1
     else:
-        rent_range['rent_5000_more'] += 1
+        rent_range['rent_4000_more'] += 1
 
 rent_range.to_excel(writer, 'rentrange')
 
@@ -413,24 +409,31 @@ rental_comps.sort_values(by=['DistanceFromProperty']).to_excel(writer, 'rentalco
 
 
 # calculate price per sqft and exclude outliers for graph
-bedroomscatterplot = rental_comps[(rental_comps['pricepersqft'] > 0)]
-bedroomscatterplot = bedroomscatterplot[(bedroomscatterplot['bedrooms'] >= 0)]
+average_rent_per_sqft = rental_comps[(rental_comps['pricepersqft'] > 0)]
+average_rent_per_sqft = average_rent_per_sqft[(average_rent_per_sqft['bedrooms'] >= 0)]
 
 # calculate z-score for each rent. Anything with z-score > 3 is considered outlier
 outliers = []
 z_score_threshold = 3
-mean_1 = np.mean(bedroomscatterplot['pricepersqft'])
-std_1 = np.std(bedroomscatterplot['pricepersqft'])
+mean_1 = np.mean(average_rent_per_sqft['pricepersqft'])
+std_1 = np.std(average_rent_per_sqft['pricepersqft'])
 
-for i,row in bedroomscatterplot.iterrows():
+for i,row in average_rent_per_sqft.iterrows():
     if std_1 <= 0:
         z_score = 0
     else:
         z_score = (row['pricepersqft'] - mean_1) / std_1
     if np.abs(z_score) > z_score_threshold:
-        bedroomscatterplot.drop(i, inplace=True)
+        average_rent_per_sqft.drop(i, inplace=True)
 
-bedroomscatterplot[['formattedAddress','squareFootage','bedrooms','bathrooms','price','propertyType','pricepersqft']].to_excel(writer, 'pricepersqft')
+#Extract time format and convert into Month instead of actual date
+average_rent_per_sqft['lastSeenOnMarket'] = average_rent_per_sqft['lastSeenOnMarket'].apply(lambda x: dt.datetime.strptime((x.split('T')[0])[:4] + '-' + (x.split('T')[0])[5:7] + '-01', '%Y-%m-%d')).dt.date
+
+#get average for each month
+average_rent_per_sqft = average_rent_per_sqft[['lastSeenOnMarket', 'pricepersqft']].groupby('lastSeenOnMarket', as_index=False).mean().rename(columns={'pricepersqft': 'avgpricepersqft'})
+
+
+average_rent_per_sqft[['lastSeenOnMarket', 'avgpricepersqft']].to_excel(writer, 'pricepersqft')
 
 
 writer.save()
